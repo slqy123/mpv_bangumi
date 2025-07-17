@@ -15,7 +15,7 @@ opt.read_options(Options, mp.get_script_name(), function() end)
 ---@param exe string
 local function binary_fallback(exe)
   local py_binary_dir
-  if mp.get_property_native "platform" == "win32" then
+  if mp.get_property_native "platform" == "windows" then
     if exe:sub(-4) ~= ".exe" then
       exe = exe .. ".exe"
     end

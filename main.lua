@@ -194,6 +194,11 @@ mp.register_script_message("send-danmaku", function(comment)
   local function send_danmaku()
     bgm.send_danmaku(EpisodeInfo.episodeId, comment).async {
       resp = function(data)
+        if not data or not data.path then
+          mp.msg.error "发送弹幕功能暂不支持"
+          mp.osd_message("发送弹幕功能暂不支持", 3)
+          return
+        end
         mp.msg.verbose "弹幕发送成功"
         mp.osd_message("弹幕发送成功", 3)
         require("lib.danmaku_render"):parse_danmaku(data.path)

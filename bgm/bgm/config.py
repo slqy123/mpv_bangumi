@@ -13,12 +13,12 @@ class DanmakuConfig(BaseModel):
     danmaku_factory_path: str = "DanmakuFactory"
     scrolltime: int = 15
     fontname: str = "sans-serif"
-    fontsize: int = 50
+    fontsize: int = 36
     font_size_strict: bool = False
     shadow: int = 0
     bold: bool = True
     density: float = 0.0
-    displayarea: float = 0.85
+    displayarea: float = 0.5
     outline: float = 1.0
     blockmode: str = ""
     blacklist_path: str = ""
@@ -38,7 +38,7 @@ def init_config():
         "Please enter your access token(You can get a new token from https://next.bgm.tv/demo/access-token)",
         type=str,
     ).strip()
-    storage = click.prompt("Please enter your bangumi storage path", type=Path).strip()
+    storage: Path = click.prompt("Please enter your bangumi storage path", type=Path)
     click.echo(
         "You can download DanmakuFactory from https://github.com/hihkm/DanmakuFactory/actions/runs/15092837913"
     )

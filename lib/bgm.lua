@@ -6,6 +6,7 @@ local M = {}
 -- force id will skip the matching process and use the provided id directly
 function M.match(force_id)
   local file_path = mp.get_property "path"
+  file_path = mp.command_native({"normalize-path", file_path})
   local file_info = mp_utils.file_info(file_path)
 
   if not file_info or not file_info.is_file then
@@ -91,6 +92,7 @@ end
 
 function M.update_metadata()
   local file_path = mp.get_property "path"
+  file_path = mp.command_native({"normalize-path", file_path})
   local file_info = mp_utils.file_info(file_path)
 
   if not file_info or not file_info.is_file then
@@ -134,6 +136,7 @@ function M.fetch_episodes()
     return utils.subprocess_err()
   end
   local file_path = mp.get_property "path"
+  file_path = mp.command_native({"normalize-path", file_path})
   local file_info = mp_utils.file_info(file_path)
 
   if not file_info or not file_info.is_file then
@@ -155,6 +158,7 @@ function M.update_episode()
     return utils.subprocess_err()
   end
   local file_path = mp.get_property "path"
+  file_path = mp.command_native({"normalize-path", file_path})
   local file_info = mp_utils.file_info(file_path)
 
   if not file_info or not file_info.is_file then

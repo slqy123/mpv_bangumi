@@ -4,6 +4,10 @@ import logging
 from rich.logging import RichHandler
 from rich.console import Console
 import os
+import sys
+
+sys.stdout.reconfigure(encoding="utf-8")  # type: ignore
+sys.stderr.reconfigure(encoding="utf-8")  # type: ignore
 
 CONFIG_PATH = Path(user_config_dir(__name__))
 DATA_PATH = Path(user_data_dir(__name__))

@@ -107,11 +107,12 @@ class DanDanAPI:
         self.limit = limit
         self.appid = os.environ["DANDANPLAY_APPID"]
         self.secret = os.environ["DANDANPLAY_APPSECRET"]
+        self.has_auth = bool(AUTHENTICATION_TOKEN)
         self.auth_header = (
             {
                 "Authorization": f"Bearer {AUTHENTICATION_TOKEN}",
             }
-            if AUTHENTICATION_TOKEN
+            if self.has_auth
             else {}
         )
 
@@ -485,6 +486,10 @@ def login_or_update():
 @click.option("--time", type=float, default=0.0)
 def comment(comment: str, episode_id: int, color: int, position: int, time: float):
     api = DanDanAPI()
+    if not api.has_auth:
+        logger.error("No authentication token found, please login first.")
+        click.echo(json.dumps(dict(path=None, error=True), ensure_ascii=False))
+        return
     success = api.run(
         api.comment(
             comment=comment,
