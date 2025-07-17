@@ -1,0 +1,26 @@
+[project]
+name = "bgm"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "aiohttp>=3.11.18",
+    "appdirs>=1.4.4",
+    "click>=8.1.8",
+    "dmconvert>=0.0.4",
+    "dotenv>=0.9.9",
+    "pydantic>=2.11.4",
+    "pymediainfo>=7.0.1",
+    "requests>=2.32.3",
+    "rich>=14.0.0",
+    "sh>=2.2.2",
+    "toml>=0.10.2",
+]
+
+[project.scripts]
+bgm = "bgm.main:main"
+
+[[tool.mypy.overrides]]
+module = ["*.*"]
+follow_untyped_imports = true
