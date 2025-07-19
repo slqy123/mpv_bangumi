@@ -45,6 +45,9 @@ def fuzzy_match_title(t1: str, t2: str) -> float:
     """Fuzzy match two titles and return a similarity score."""
     from difflib import SequenceMatcher
 
+    if not t1 or not t2:
+        return 0.0
+
     parts1 = t1.split(" ")
     parts2 = t2.split(" ")
     common_parts = set(parts1) & set(parts2)

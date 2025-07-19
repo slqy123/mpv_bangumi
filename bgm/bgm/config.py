@@ -1,4 +1,5 @@
 import random
+from typing import Literal
 import click
 import toml
 from bgm import CONFIG_PATH, logger
@@ -11,6 +12,7 @@ import os
 
 class DanmakuConfig(BaseModel):
     danmaku_factory_path: str = "DanmakuFactory"
+    danmaku_engine: Literal["DanmakuFactory", "dmconvert"] = "dmconvert"
     scrolltime: int = 15
     fontname: str = "sans-serif"
     fontsize: int = 36
@@ -35,16 +37,23 @@ def init_config():
     CONFIG_PATH.mkdir(parents=True, exist_ok=True)
     config_file = CONFIG_PATH / "config.toml"
     access_token = click.prompt(
-        "Please enter your access token(You can get a new token from https://next.bgm.tv/demo/access-token)",
+        "请输入bangumi access token (可从此处获取：https://next.bgm.tv/demo/access-token)",
         type=str,
     ).strip()
-    storage: Path = click.prompt("Please enter your bangumi storage path", type=Path)
-    click.echo(
-        "You can download DanmakuFactory from https://github.com/hihkm/DanmakuFactory/actions/runs/15092837913"
+    storage: Path = click.prompt(
+        "请输入番剧的存储目录（插件仅会在该目录下激活）", type=Path
     )
-    danmaku_factory_path = click.prompt(
-        "Please enter your danmaku factory path, or skip if you have installed globally",
-        default="DanmakuFactory",
+    # click.echo(
+    #     "You can download DanmakuFactory from https://github.com/hihkm/DanmakuFactory/actions/runs/15092837913"
+    # )
+    # danmaku_factory_path = click.prompt(
+    #     "Please enter your danmaku factory path, or skip if you have installed globally",
+    #     default="DanmakuFactory",
+    #     type=str,
+    # ).strip()
+    fontname = click.prompt(
+        "请输入弹幕字体名称",
+        default="sans-serif",
         type=str,
     ).strip()
 
@@ -52,7 +61,7 @@ def init_config():
         toml.dump(
             {
                 "storages": [str(storage)],
-                "danmaku": {"danmaku_factory_path": danmaku_factory_path},
+                "danmaku": {"fontname": fontname},
             },
             f,
         )

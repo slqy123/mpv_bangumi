@@ -297,6 +297,13 @@ def generate_ass_events(ass_input: Path) -> str:
     return "\n".join(res)
 
 
+convert_dandanplay_json2ass = (
+    convert_dandanplay_json2ass_legacy
+    if config.danmaku.danmaku_engine == "DanmakuFactory"
+    else lambda i, o: convert_dandanplay_json2ass_pylib(i, o, 36, (1920, 1080))
+)
+
+
 def get_style_config():
     """style config for danmaku_render.lua"""
     return dict(

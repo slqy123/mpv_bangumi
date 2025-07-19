@@ -19,8 +19,7 @@ from bgm import DATA_PATH
 from bgm import logger
 from bgm.config import config
 from bgm.danmaku import (
-    convert_dandanplay_json2ass_legacy,
-    convert_dandanplay_json2ass_pylib,
+    convert_dandanplay_json2ass,
     get_style_config,
 )
 from bgm.db import EpisodeMatch, db
@@ -411,8 +410,7 @@ def fetch(video: Path, force_id: int | None = None):
         ass_path.exists()
         and ass_path.stat().st_mtime_ns < comment_path.stat().st_mtime_ns
     ):
-        # convert_dandanplay_json2ass_legacy(comment_path, ass_path)
-        convert_dandanplay_json2ass_pylib(comment_path, ass_path, 36, (1920, 1080))
+        convert_dandanplay_json2ass(comment_path, ass_path)
 
     logger.info("Danmaku fetched successfully.")
     click.echo(
@@ -512,8 +510,7 @@ def comment(comment: str, episode_id: int, color: int, position: int, time: floa
     )
     comment_path = db.get_path(episode_id, "comment")
     ass_path = db.get_path(episode_id, "ass")
-    # convert_dandanplay_json2ass_legacy(comment_path, ass_path)
-    convert_dandanplay_json2ass_pylib(comment_path, ass_path, 36, (1920, 1080))
+    convert_dandanplay_json2ass(comment_path, ass_path)
     assert ass_path.exists()
     click.echo(json.dumps(dict(path=str(ass_path)), ensure_ascii=False))
 
