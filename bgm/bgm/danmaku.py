@@ -68,6 +68,7 @@ def get_fixed_y(font_size, appear_time, resolution_y, array):
                 if delta_time > best_bias:
                     best_bias = delta_time
                     best_row = i
+    array.set_time_length(best_row, appear_time, 0)
     return font_size * best_row + 1
 
 
@@ -171,8 +172,10 @@ def convert_dandanplay_json2ass_pylib(
             p = o.get("p")
             if not p:
                 return 0
-            timestamp, mode, *_ = p.split(",", 2)
-            return (int(mode), float(timestamp))
+            # timestamp, mode, *_ = p.split(",", 2)
+            # return (int(mode), float(timestamp))
+            timestamp, *_ = p.split(",", 1)
+            return float(timestamp)
 
         danmaku_data["comments"] = sorted(danmaku_data["comments"], key=__get_timestamp)
 

@@ -96,7 +96,7 @@ function M.subprocess_wrapper(args)
     mp.command_native_async({
       name = "subprocess",
       args = args,
-      playback_only = true,
+      playback_only = false,
       capture_stdout = true,
       capture_stderr = true,
     }, function(success, result, error)
