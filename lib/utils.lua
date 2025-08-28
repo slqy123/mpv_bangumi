@@ -144,4 +144,8 @@ function M.subprocess_err()
   }
 end
 
+function M.is_protocol(path)
+    return type(path) == 'string' and (path:find('^%a[%w.+-]-://') ~= nil or path:find('^%a[%w.+-]-:%?') ~= nil)
+end
+
 return M

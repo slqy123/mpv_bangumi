@@ -104,7 +104,7 @@ local function init(episode_id)
       end
       if data.error then
         if data.error == "VideoPathError" then
-          mp.msg.info(
+          mp.msg.verbose(
             "Skip video "
               .. data.video
               .. " not in the storage path "
@@ -165,6 +165,10 @@ local function init(episode_id)
 end
 
 mp.register_event("file-loaded", function()
+  if utils.is_protocol(mp.get_property "path") then
+    mp.msg.verbose("Skipping init for protocol:", mp.get_property "path")
+    return
+  end
   init()
 end)
 

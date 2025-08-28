@@ -140,7 +140,7 @@ class DanDanAPI:
         sig = self.generate_signature(timestamp, path)
         async with self.client.post(
             self.BASE_API + uri,
-            data=data,
+            json=data,
             headers={
                 "Accept": "application/json",
                 "X-AppId": self.appid,
