@@ -19,7 +19,7 @@ def extract_info_from_filename(filename: str):
     tags = tags_re.findall(filename)
     tags = list(map(str.strip, tags))
     _ = re.split(tags_re, filename)[::2]
-    _ = reduce(lambda x, y: x + y, [s.split(" ") for s in _], [])
+    _ = reduce(lambda x, y: x + y, [s.split() for s in _], [])
     title_parts = list(filter(bool, map(str.strip, _)))
 
     for tag in tags:
@@ -32,9 +32,10 @@ def extract_info_from_filename(filename: str):
     else:
         for i, part in enumerate(title_parts):
             if (
-                (res := re.search(r"-?(\d+)-?", part))
-                or (res := re.search(r"-?ep(\d+)-?", part, re.IGNORECASE))
+                (res := re.search(r"-?ep(\d+)-?", part, re.IGNORECASE))
                 or (res := re.search(r"-?s\d+e(\d+)-?", part, re.IGNORECASE))
+                or (res := re.match(r"-?(\d+)(v\d|end)?-?$", part, re.IGNORECASE))
+                or (res := re.match(r"-?(\d+)-?$", part))
             ):
                 episode = int(res.group(1))
                 title_parts[i] = part[: res.start()] + " " + part[res.end() :]
