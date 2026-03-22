@@ -22,6 +22,7 @@ AnimeInfo = nil
 UpdateEpisodeTimer = nil
 BangumiSucessFlag = 0
 MatchResults = nil
+InputID = nil  -- fix race condition for mp.input, need https://github.com/mpv-player/mpv/pull/17256
 
 local function reset_globals()
   -- Delay = 0
@@ -33,6 +34,8 @@ local function reset_globals()
   end
   BangumiSucessFlag = 0
   MatchResults = nil
+  input.terminate(InputID)
+  InputID = nil
 end
 
 local function init_after_bangumi_id()
@@ -221,10 +224,10 @@ mp.register_script_message("send-danmaku", function(comment)
 
   if not comment then
     mp.set_property("pause", "yes")
-    input.get {
+    InputID = input.get {
       prompt = "请输入弹幕内容：",
       submit = function(text)
-        input.terminate()
+        input.terminate(InputID)
         mp.set_property("pause", "no")
         comment = text
         send_danmaku()
@@ -315,11 +318,11 @@ mp.register_script_message("manual-match", function()
     for i, item in ipairs(data) do
       anime_items[i] = string.format("%d. %s\t[%s]", i, item.title, item.type)
     end
-    input.terminate()
-    input.select {
+    InputID = input.select {
       prompt = "请选择正确番剧：",
       items = anime_items,
       submit = function(idx)
+        input.terminate(InputID)
         if idx < 1 or idx > #data then
           mp.msg.error "无效的选择"
           return
@@ -333,10 +336,10 @@ mp.register_script_message("manual-match", function()
 
   mp.set_property("pause", "yes")
   if not MatchResults then
-    input.terminate()
-    input.get {
+    InputID = input.get {
       prompt = "请输入番剧名：",
       submit = function(text)
+        input.terminate(InputID)
         bgm.dandanplay_search(text).async {
           resp = function(data)
             select_anime(data)
@@ -362,17 +365,17 @@ mp.register_script_message("manual-match", function()
   end
   match_items[#match_items + 1] = "没有结果，手动搜索"
 
-  input.select {
+  InputID = input.select {
     prompt = "请选择匹配结果：",
     items = match_items,
     submit = function(idx)
+      input.terminate(InputID)
       if idx < 1 or idx > #match_items then
         mp.msg.error "无效的选择"
         return
       end
       if idx == #match_items then
         mp.msg.verbose "选择了手动搜索"
-        input.terminate()
         MatchResults = nil
         mp.command "script-message manual-match"
         return
