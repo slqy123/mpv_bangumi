@@ -468,6 +468,10 @@ class NicoNicoSource(DanmakuSource):
             or info.get(str(ep)) is None
         ):
             info = self._update_series_info()
+        min_ep = min([int(k) for k in info if k.isdigit()])
+        if min_ep > 1 and self.offset == 0:
+            return info.get(str(min_ep - 1 + ep))
+            
         return info.get(str(ep))
 
     def convert_format(self, danmaku: list[dict]) -> list[dict]:
@@ -489,7 +493,6 @@ class NicoNicoSource(DanmakuSource):
         return danmaku_new
 
     def fetch(self, ep: int) -> tuple[list[dict], str] | None:
-        ep += self.offset
         video_id = self.map_ep(ep)
         if video_id is None:
             return
