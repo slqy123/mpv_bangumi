@@ -154,19 +154,23 @@ class DB:
     def get_path(
         self,
         episode_id: int,
-        type_: Literal["comment", "ass", "metadata", "info", "episodes"],
+        type_: Literal["comment", "ass", "metadata", "info", "episodes", "source", "commentEX"],
     ):
         path = self.metadata_path / f"{episode_id // 10000}"
-        if type_ == "comment":
+        if type_ == "comment":  # 单集字幕(json)
             path /= f"{episode_id}-comment.json"
-        elif type_ == "ass":
+        elif type_ == "ass":  # 单集字幕(ass)
             path /= f"{episode_id}-comment.ass"
-        elif type_ == "info":
+        elif type_ == "info":  # 番剧信息(dandanplay)
             path /= f"{episode_id // 10000}-info.json"
-        elif type_ == "metadata":
+        elif type_ == "metadata":  # dandanplay 匹配信息
             path /= f"{episode_id}.json"
-        elif type_ == "episodes":
+        elif type_ == "episodes":  # 番剧信息(bangumi.tv)
             path /= "episodes.json"
+        elif type_ == "source":  # 第三方弹幕源信息(current niconico only)
+            path /= "source.json"
+        elif type_ == "commentEX":  # 第三方弹幕源的弹幕
+            path /= f"{episode_id}-commentEX.json"
         else:
             raise ValueError(f"Unknown type: {type_}")
         return path

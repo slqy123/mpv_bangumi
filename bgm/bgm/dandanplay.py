@@ -23,6 +23,7 @@ from bgm.danmaku import (
     get_style_config,
 )
 from bgm.db import EpisodeMatch, db
+from bgm.source import get_source_danmaku, get_source_status
 from bgm.utils import extract_info_from_filename
 
 
@@ -363,6 +364,9 @@ def fetch(video: Path, force_id: int | None = None):
         episode_info = db.get_episode_info(force_id)
         if episode_info is None:
             episode_info = construct_episode_match(episode_id)
+        if episode_info is None:
+            logger.error("Failed to find the given episode info")
+            exit(-1)
         logger.info("Using forced episode ID: %s for video %s", force_id, video.name)
         logger.info("ForceID episode info: %s", episode_info)
         db.set_dandanplay_id(str(video), episode_info.episodeId)
@@ -405,12 +409,43 @@ def fetch(video: Path, force_id: int | None = None):
             api.get_comment(episode_info.episodeId, related=True, convert="no")
         )[0],
     )
+    comment_path_final = comment_path.with_suffix(".final.json")
     ass_path = comment_path.with_suffix(".ass")
-    if not (
-        ass_path.exists()
-        and ass_path.stat().st_mtime_ns < comment_path.stat().st_mtime_ns
-    ):
+    sources = get_source_status(anime_id=episode_id // 10000)
+    comments = []
+    additional_desc = []
+    logger.debug("sources: %s", sources)
+    for source, options in sources.items():
+        if source == "main" and options.get("enabled"):
+            comments.extend(json.loads(comment_path.read_text())["comments"])
+            continue
+        if options.get("enabled"):
+            assert source == "niconico"
+            source_comments_desc = get_source_danmaku(episode_id, source)
+            if source_comments_desc is None:
+                logger.error("Failed to get danmaku from source: %s", source)
+            else:
+                comments.extend(source_comments_desc[0])
+                additional_desc.append(f"[{source}]：{source_comments_desc[1]}")
+    if len(comments) == 0:
         convert_dandanplay_json2ass(comment_path, ass_path)
+    else:
+        with comment_path_final.open("w", encoding="utf-8") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "count": len(comments),
+                        "comments": comments,
+                    }
+                )
+            )
+        convert_dandanplay_json2ass(comment_path_final, ass_path)
+
+    # if not (
+    #     ass_path.exists()
+    #     and ass_path.stat().st_mtime_ns < comment_path.stat().st_mtime_ns
+    # ):
+    #     convert_dandanplay_json2ass(comment_path, ass_path)
 
     logger.info("Danmaku fetched successfully.")
     click.echo(
@@ -419,8 +454,12 @@ def fetch(video: Path, force_id: int | None = None):
                 "path": str(ass_path),
                 "style": get_style_config(),
                 "info": episode_info.model_dump(),
-                "desc": episode_info.animeTitle + " " + episode_info.episodeTitle,
+                "desc": episode_info.animeTitle
+                + " "
+                + episode_info.episodeTitle,
+                "desc_extra": "\n".join(additional_desc) if len(additional_desc) else "",
                 "count": json.loads(comment_path.read_text(encoding="utf-8"))["count"],
+                "sources": sources,
             },
             ensure_ascii=False,
         )

@@ -192,4 +192,14 @@ function M.get_dandanplay_episodes(anime_id)
   }
 end
 
+function M.update_source_status(anime_id, source_status)
+  return utils.subprocess_wrapper {
+    Options.bgm_path,
+    "source",
+    "set-status",
+    tostring(anime_id),
+    mp_utils.format_json(source_status)
+  }
+end
+
 return M

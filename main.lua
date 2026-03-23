@@ -23,6 +23,7 @@ UpdateEpisodeTimer = nil
 BangumiSucessFlag = 0
 MatchResults = nil
 InputID = nil  -- fix race condition for mp.input, need https://github.com/mpv-player/mpv/pull/17256
+SourceStatus = nil
 
 local function reset_globals()
   -- Delay = 0
@@ -36,6 +37,7 @@ local function reset_globals()
   MatchResults = nil
   input.terminate(InputID)
   InputID = nil
+  SourceStatus = nil
 end
 
 local function init_after_bangumi_id()
@@ -139,6 +141,15 @@ local function init(episode_id)
           data.count
         )
       )
+      if data.desc_extra ~= nil and #data.desc_extra ~= 0 then
+        mp.msg.info(
+          string.format(
+            "额外弹幕源信息：%s",
+            data.desc_extra
+          )
+        )
+      end
+      SourceStatus = data.sources
       for k, v in pairs(data.style) do
         mp.msg.verbose(k, v)
       end
@@ -184,6 +195,7 @@ local key_bindings = {
   ["Alt+."] = { "toggle-danmaku-visibility" },
   ["Alt+o"] = { "open-bangumi-url" },
   ["Alt+m"] = { "manual-match" },
+  ["Alt+n"] = { "niconico-danmaku" }
 }
 
 for key, binding in pairs(key_bindings) do
@@ -391,5 +403,95 @@ mp.register_script_message("manual-match", function()
     closed = function()
       mp.set_property("pause", "no")
     end,
+  }
+end)
+
+mp.register_script_message("niconico-danmaku", function()
+  local function update_status_and_reload_danmaku()
+      bgm.update_source_status(EpisodeInfo.animeId, SourceStatus).async {
+        resp = function(data)
+          if data.success then
+            mp.msg.verbose("update source status successfully", data.sources)
+            init()
+          end
+        end,
+        err = function(error)
+          mp.msg.error("Failed to update source status", error)
+        end
+      }
+  end
+
+  if SourceStatus == nil then
+    mp.msg.error("No sources information found!")
+    mp.osd_message("获取弹幕源状态失败！")
+    return
+  end
+
+  SourceStatus.niconico = SourceStatus.niconico or {}
+  SourceStatus.main = SourceStatus.main or {}
+
+  InputID = input.select {
+    prompt = "N站弹幕设置：",
+    items = {
+      "仅显示N站弹幕",
+      "不显示N站弹幕",
+      "同时显示N站与dandanplay弹幕",
+      "修改剧集匹配映射关系",
+      "通过series id匹配"
+    },
+    submit = function(idx)
+      input.terminate(InputID)
+      if idx < 1 or idx > 5 then
+        mp.msg.error "无效的选择"
+        return
+      end
+      if idx == 4 then
+        mp.add_timeout(0.2, function()
+          InputID = input.get {
+            prompt = string.format("将当前章节数(%d)映射到：", EpisodeInfo.episodeId % 10000),
+            submit = function(ep)
+              mp.msg.verbose("submit")
+              input.terminate(InputID)
+              local ep_offset = tonumber(ep) - EpisodeInfo.episodeId % 10000
+              SourceStatus.niconico.offset = ep_offset
+              update_status_and_reload_danmaku()
+            end
+          }
+        end)
+        return
+      end
+
+      if idx == 5 then
+        mp.add_timeout(0.2, function()
+          InputID = input.get {
+            prompt = "请输入series id：",
+            submit = function(series_id)
+              input.terminate(InputID)
+              SourceStatus.niconico.series = series_id
+              update_status_and_reload_danmaku()
+            end
+          }
+        end)
+        return
+      end
+
+      --- idx == 1, 2, 3
+
+      if idx == 1 then
+        SourceStatus.main.enabled = false
+        SourceStatus.niconico.enabled = true
+      end
+
+      if idx == 2 then
+        SourceStatus.main.enabled = true
+        SourceStatus.niconico.enabled = false
+      end
+
+      if idx == 3 then
+        SourceStatus.main.enabled = true
+        SourceStatus.niconico.enabled = true
+      end
+      update_status_and_reload_danmaku()
+    end
   }
 end)

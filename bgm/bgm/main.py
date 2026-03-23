@@ -1,6 +1,7 @@
 import click
 from bgm.dandanplay import main as dandanplay
 from bgm.bangumi import main as bangumi
+from bgm.source import source
 
 
 @click.group()
@@ -19,6 +20,7 @@ def open_url(url: str):
 
 main.add_command(dandanplay)
 main.add_command(bangumi)
+main.add_command(source)
 
 if __name__ == "__main__":
     main()
