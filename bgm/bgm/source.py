@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import time
 
-from bgm import DATA_PATH
+from bgm import DATA_PATH, logger
 from bgm.db import DB, IDS, db
 
 class DanmakuSource(Protocol):
@@ -52,12 +52,21 @@ def get_source_danmaku(episode_id: int, source: Literal["niconico"]) -> tuple[li
     if (danmaku:=sources.get(source)) is not None and not db.is_outdated(comment_path):
         return danmaku
 
+    ids = db.get(dandanplay_id=episode_id)
+    if ids is None:
+        assert False, "Dandanplay ID should not be None"
+    if ids.bgm_id is None:
+        info_path = db.get_path(episode_id, "info")
+        info = json.loads(info_path.read_text())
+        bgm_id = int(info["bangumiUrl"].rsplit("/", 1)[1])
+        ids = IDS(ids.path, bgm_id, ids.dandanplay_id)
+
     match source:
         case "niconico":
             from bgm.niconico import NicoNicoSource
             return NicoNicoSource(
                 get_source_status(episode_id // 10000)[source],
-                DanmakuSource.Context(DATA_PATH / f"metadata/{episode_id // 10000}/cache_{source}", get_or_update_bangumi_data()["items"], db.get(dandanplay_id=episode_id))
+                DanmakuSource.Context(DATA_PATH / f"metadata/{episode_id // 10000}/cache_{source}", get_or_update_bangumi_data()["items"], ids)
             ).fetch(episode_id % 10000)
         case _:
             assert False

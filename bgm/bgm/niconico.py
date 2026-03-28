@@ -277,8 +277,11 @@ def get_detail_data(detail: str) -> dict[str, str]:
     detail_id = parse_detail_id(detail)
     url = f'https://anime.nicovideo.jp/detail/{detail_id}/index.html'
     request = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-    with urllib.request.urlopen(request, timeout=30) as response:
-        webpage = response.read().decode('utf-8', errors='replace')
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            webpage = response.read().decode('utf-8', errors='replace')
+    except Exception:
+        return {}
 
     sources = [webpage]
     script_src_re = re.compile(r'<script[^>]+src=["\'](?P<src>[^"\']+)["\']', flags=re.IGNORECASE)
@@ -468,7 +471,10 @@ class NicoNicoSource(DanmakuSource):
             or info.get(str(ep)) is None
         ):
             info = self._update_series_info()
-        min_ep = min([int(k) for k in info if k.isdigit()])
+        try:
+            min_ep = min([int(k) for k in info if k.isdigit()])
+        except ValueError:
+            return None
         if min_ep > 1 and self.offset == 0:
             return info.get(str(min_ep - 1 + ep))
             
@@ -495,7 +501,7 @@ class NicoNicoSource(DanmakuSource):
     def fetch(self, ep: int) -> tuple[list[dict], str] | None:
         video_id = self.map_ep(ep)
         if video_id is None:
-            return
+            return None
         logger.debug("NicoNico video_id: %s", video_id)
 
         out_path = self.context.data_path / f'{video_id}.comments.json'
