@@ -398,6 +398,7 @@ def fetch(video: Path, force_id: int | None = None):
     else:
         # match video to dandanplay episode
         episode_info = fallback_to_match()
+        episode_id = episode_info.episodeId
         db.set_dandanplay_id(str(video), episode_info.episodeId)
         db.set_episode_info(episode_info.episodeId, episode_info)
 

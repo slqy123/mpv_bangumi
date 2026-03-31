@@ -464,6 +464,7 @@ class NicoNicoSource(DanmakuSource):
 
 
     def map_ep(self, ep: int):
+        ep += self.offset
         info = self._get_series_info()
         if (
             info.get("series") != self.series
