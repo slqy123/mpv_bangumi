@@ -49,8 +49,32 @@ SERIES_RE = re.compile(r'https?://(?:(?:sp|www)\.)?nicovideo\.jp/series/(?P<id>\
 DETAIL_RE = re.compile(r'https?://anime\.nicovideo\.jp/detail/(?P<id>[A-Za-z0-9_-]+)(?:/index\.html)?/?(?:\?.*)?$')
 
 _FULLWIDTH_DIGITS = str.maketrans('０１２３４５６７８９', '0123456789')
-_KANJI_NUMERALS = {'〇': 0, '零': 0, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9}
-_KANJI_UNITS = {'十': 10, '百': 100, '千': 1000}
+_KANJI_NUMERALS = {
+    '〇': 0,
+    '零': 0,
+    '一': 1,
+    '二': 2,
+    '三': 3,
+    '四': 4,
+    '五': 5,
+    '六': 6,
+    '七': 7,
+    '八': 8,
+    '九': 9,
+    '壱': 1,
+    '弐': 2,
+    '参': 3,
+    '肆': 4,
+    '伍': 5,
+    '陸': 6,
+    '漆': 7,
+    '柒': 7,
+    '捌': 8,
+    '玖': 9,
+}
+_KANJI_UNITS = {'十': 10, '拾': 10, '百': 100, '佰': 100, '陌': 100, '千': 1000, '仟': 1000, '阡': 1000}
+
+_KANJI_NUMBER_CHARS = '〇零一二三四五六七八九壱弐参肆伍陸漆柒捌玖十拾百佰陌千仟阡'
 
 
 class _NiconicoSeriesParser(HTMLParser):
@@ -179,7 +203,7 @@ def _extract_episode_key(title: str, index: int) -> str:
         re.search(r'(?<!\w)#\s*0*(\d{1,4})(?!\d)', normalized, flags=re.IGNORECASE),
         re.search(r'(?<!\w)ep(?:isode)?\.?\s*0*(\d{1,4})(?!\d)', normalized, flags=re.IGNORECASE),
         re.search(r'(?<!\w)s\d{1,3}\s*e\s*0*(\d{1,4})(?!\d)', normalized, flags=re.IGNORECASE),
-        re.search(r'第\s*([0-9]{1,4}|[〇零一二三四五六七八九十百千]+)\s*(?:話|回|集|章)', normalized),
+        re.search(rf'第\s*([0-9]{{1,4}}|[{_KANJI_NUMBER_CHARS}]+)\s*(?:話|回|集|章)', normalized),
         re.search(r'(?<!\d)(\d{1,4})\s*(?:話|回|集|章)(?!\d)', normalized),
         re.search(r'^\s*0*(\d{1,4})\s*(?:[-:：\.、]|\s)', normalized),
     )
