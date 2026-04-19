@@ -442,7 +442,7 @@ class NicoNicoSource(DanmakuSource):
         self.series: int|None = options.get("series")
         self.offset: int = options.get("offset", 0)
 
-    def _update_series_info(self) -> dict:
+    def _update_series_info(self) -> dict|None:
         if self.series is not None:
             _series_map = get_series_data(str(self.series))
         else:
@@ -459,13 +459,13 @@ class NicoNicoSource(DanmakuSource):
                 break
             else:
                 logger.error("bangumi not found in bangumi-data")
-                exit(-1)
+                return None
             logger.debug("Found anime, title: %s", item["title"])
 
             sites = [site["site"] for site in item["sites"]]
             if "nicovideo" not in sites:
                 logger.error("No nicovideo source found")
-                exit(-1)
+                return None
             nico_anime_id = item["sites"][sites.index("nicovideo")]["id"]
             logger.debug("Get nico_anime_id: %s", nico_anime_id)
             _series_map = get_detail_data(nico_anime_id)
@@ -496,6 +496,8 @@ class NicoNicoSource(DanmakuSource):
             or info.get(str(ep)) is None
         ):
             info = self._update_series_info()
+            if info is None:
+                return None
         try:
             min_ep = min([int(k) for k in info if k.isdigit()])
         except ValueError:

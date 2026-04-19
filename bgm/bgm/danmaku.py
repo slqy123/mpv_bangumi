@@ -181,6 +181,7 @@ def convert_dandanplay_json2ass_pylib(
 
     root = ET.Element("i")
 
+    danmaku_set = set()
     for danmaku in danmaku_data["comments"]:
         p = danmaku.get("p")
         m = danmaku.get("m")
@@ -189,6 +190,11 @@ def convert_dandanplay_json2ass_pylib(
             continue
 
         timestamp, mode, color, uid = p.split(",")
+
+        if (m, timestamp) in danmaku_set:
+            continue
+        danmaku_set.add((m, timestamp))
+        
         timestamp = float(timestamp) + shift
         p = f"{timestamp},{mode},25,{color},,,,"
         element = ET.SubElement(
