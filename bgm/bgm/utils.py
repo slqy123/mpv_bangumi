@@ -31,6 +31,18 @@ def extract_info_from_filename(filename: str):
             break
     else:
         for i, part in enumerate(title_parts):
+            # ANi style
+            if (
+                part == "Season"
+                and i + 3 < len(title_parts)
+                and title_parts[i + 1].isdigit()
+                and title_parts[i + 2] == "-"
+                and title_parts[i + 3].isdigit()
+            ):
+                episode = int(title_parts[i + 3])
+                title_parts = title_parts[: i + 2] + title_parts[i + 4 :]
+                break
+
             if (
                 (res := re.search(r"-?ep(\d+)-?", part, re.IGNORECASE))
                 or (res := re.search(r"-?s\d+e(\d+)-?", part, re.IGNORECASE))
