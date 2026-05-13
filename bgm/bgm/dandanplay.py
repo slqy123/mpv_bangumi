@@ -403,6 +403,7 @@ def fetch(video: Path, force_id: int | None = None):
         db.set_episode_info(episode_info.episodeId, episode_info)
 
     logger.info("Episode info: %s", episode_info)
+    db.conn.commit()
 
     comment_path = db.update_comment(
         episode_info.episodeId,
