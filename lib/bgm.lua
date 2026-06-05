@@ -3,6 +3,12 @@ local mp_utils = require "mp.utils"
 
 local M = {}
 
+function M.send_action(action, data)
+  PY.ensure_gil()
+  Bgm.send_action(action, PY.dict(data))
+  PY.release_gil()
+end
+
 -- force id will skip the matching process and use the provided id directly
 function M.match(force_id)
   local file_path = mp.get_property "path"
@@ -11,20 +17,14 @@ function M.match(force_id)
 
   if not file_info or not file_info.is_file then
     mp.msg.error("文件不存在或不是有效的文件: " .. file_path)
-    return utils.subprocess_err()
-  end
-  local args = {
-    Options.bgm_path,
-    "dandanplay",
-    "fetch",
-    file_path,
-  }
-  if force_id then
-    table.insert(args, "--force-id")
-    table.insert(args, tostring(force_id))
+    mp.osd_message("文件不存在或不是有效的文件: " .. file_path, 3)
+    return
   end
 
-  return utils.subprocess_wrapper(args)
+  M.send_action("match", {
+    path = file_path,
+    force_id = force_id
+  })
 end
 
 function M.send_danmaku(episode_id, comment)
@@ -108,12 +108,8 @@ function M.update_metadata()
   }
 end
 
-function M.open_url(url)
-  return utils.subprocess_wrapper {
-    Options.bgm_path,
-    "open-url",
-    url,
-  }
+function M.open_url(bgm_id)
+  M.send_action("open-bangumi-url", { bgm_id = bgm_id })
 end
 
 function M.update_bangumi_collection()

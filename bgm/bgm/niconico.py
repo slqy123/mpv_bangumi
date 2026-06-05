@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
 
+import asyncio
 import json
 import re
 import time
 from pathlib import Path
 from html.parser import HTMLParser
 import html
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+import portalocker
 
 from bgm import logger
 from bgm.source import DanmakuSource
+
+if TYPE_CHECKING:
+    from bgm.mpvbangumi import MPVBangumi
 
 NiconicoColorMap = {
     "red": 0xFF0000,
@@ -448,7 +454,7 @@ class NicoNicoSource(DanmakuSource):
         else:
             if self.context.ids is None or self.context.ids.bgm_id is None:
                 logger.error("Failed to get bgm id")
-                exit(-1)
+                return
             bgm_id = self.context.ids.bgm_id
             for item in self.context.bangumi_data:
                 if not any(
@@ -544,6 +550,23 @@ class NicoNicoSource(DanmakuSource):
 
         return self.convert_format(result), desc
 
+async def niconico_fetch_danmaku(
+    ctx: "MPVBangumi", episode_id: int, options: dict, context: DanmakuSource.Context
+):
+    with portalocker.Lock(
+        context.data_path.joinpath("update.lock"),
+        mode="w",
+        flags=portalocker.LockFlags.EXCLUSIVE,
+    ):
+        res = await asyncio.to_thread(
+            lambda: NicoNicoSource(options, context).fetch(episode_id % 10000)
+        )
+        if not res:
+            logger.warning("Failed to get nicovideo danmaku!")
+            return
+        danmaku, desc = res
+        logger.info("nicovideo title: %s", desc)
+        ctx.update_comments("niconico", danmaku)
 
 def main() -> int:
     import argparse

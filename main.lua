@@ -4,16 +4,14 @@ local bgm = require "lib.bgm"
 local mp_utils = require "mp.utils"
 local utils = require "lib.utils"
 local input = require "mp.input"
+local danmaku_render = require "lib.danmaku_render"
 
 -- globals constants
 
+PY = require "luapython"
+PY.load_prefix(mp_utils.join_path(mp.get_script_directory(), "bgm/.venv"))
 Pid = mp_utils.getpid()
-CacheDir = mp_utils.join_path(
-  mp.command_native { "expand-path", "~~cache/" },
-  "mpv_danmaku"
-)
-mp.msg.verbose("CacheDir:", CacheDir)
-os.execute("mkdir " .. CacheDir)
+Bgm = nil  -- init in init_bgm()
 
 -- global variables
 Delay = 0
@@ -24,6 +22,7 @@ BangumiSucessFlag = 0
 MatchResults = nil
 InputID = nil  -- fix race condition for mp.input, need https://github.com/mpv-player/mpv/pull/17256
 SourceStatus = nil
+ActionCallbacks = {}
 
 local function reset_globals()
   -- Delay = 0
@@ -38,7 +37,57 @@ local function reset_globals()
   input.terminate(InputID)
   InputID = nil
   SourceStatus = nil
+  ActionCallbacks = {}
 end
+
+local handle_log = function(level, msg, timeout)
+  timeout = timeout or 3
+  if level == "verbose" then
+    mp.msg.verbose(msg)
+  elseif level == "info" then
+    mp.msg.info(msg)
+  elseif level == "warn" then
+    mp.msg.warn(msg)
+  elseif level == "error" then
+    mp.msg.error(msg)
+    mp.osd_message(msg, timeout)
+  elseif level == "notify" then
+    mp.msg.info(msg)
+    mp.osd_message(msg, timeout)
+  else
+    mp.msg.error("Unkonw log level", level)
+  end
+end
+local notify = function(msg, timeout) handle_log("notify", msg, timeout) end
+
+local function init_bgm()
+  if Bgm ~= nil then
+    return
+  end
+
+  local ipc_path = ""
+  if package.config:sub(1,1) == "\\" then
+      -- Windows syntax for named pipes
+      ipc_path = [[\\.\pipe\mpv-ipc-]] .. Pid
+  else
+      -- Linux / macOS syntax for Unix domain sockets
+      ipc_path = "/tmp/mpv-ipc-" .. Pid
+  end
+  mp.set_property("input-ipc-server", ipc_path)
+  mp.msg.verbose("IPC Server created: " .. ipc_path)
+  mp.register_event("shutdown", function()
+    if package.config:sub(1, 1) == "\\" then
+      os.remove(ipc_path)
+    end
+  end)
+
+  PY.ensure_gil()
+  Bgm = PY.import("bgm.mpvbangumi").MPVBangumi({
+    ipc_path = ipc_path
+  })
+  PY.release_gil()
+end
+
 
 local function init_after_bangumi_id()
   bgm.update_bangumi_collection().async {
@@ -101,81 +150,85 @@ local function init_after_bangumi_id()
 end
 local function init(episode_id)
   reset_globals()
-  bgm.match(episode_id).async {
-    resp = function(data)
-      if not data then
-        mp.msg.error "获取弹幕失败"
-        return
-      end
-      if data.error then
-        if data.error == "VideoPathError" then
-          mp.msg.verbose(
-            "Skip video "
-              .. data.video
-              .. " not in the storage path "
-              .. data.storage
-          )
-          return
-        end
-      end
-      if data.matches ~= nil then
-        mp.msg.info "匹配结果不唯一，请手动选择"
-        mp.osd_message("匹配结果不唯一，请手动选择", 3)
-        MatchResults = data.matches
-        return
-      end
-      EpisodeInfo = data.info
-      mp.msg.verbose("弹幕路径:", data.path)
-      mp.osd_message(
-        string.format(
-          "匹配成功：%s (共%d条弹幕)",
-          data.desc,
-          data.count
-        ),
-        3
-      )
-      mp.msg.info(
-        string.format(
-          "匹配成功：%s (共%d条弹幕)",
-          data.desc,
-          data.count
-        )
-      )
-      if data.desc_extra ~= nil and #data.desc_extra ~= 0 then
-        mp.msg.info(
-          string.format(
-            "额外弹幕源信息：%s",
-            data.desc_extra
-          )
-        )
-      end
-      SourceStatus = data.sources
-      for k, v in pairs(data.style) do
-        mp.msg.verbose(k, v)
-      end
-      local render = require("lib.danmaku_render"):setup {
-        style = data.style,
-      }
-      render:parse_danmaku(data.path)
+  init_bgm()
 
-      bgm.update_metadata().async {
-        resp = function(anime_info)
-          if not anime_info or not anime_info.bgm_id then
-            mp.msg.error "获取番剧元信息失败"
-            return
-          end
-          AnimeInfo = anime_info
-          mp.msg.verbose(
-            "Bangumi ID:",
-            anime_info.bgm_id,
-            "Bangumi Url:",
-            anime_info.bgm_url
-          )
-          init_after_bangumi_id()
-        end,
-      }
-    end,
-  }
+  bgm.match(episode_id)
+
+  -- bgm.match(episode_id).async {
+  --   resp = function(data)
+  --     if not data then
+  --       mp.msg.error "获取弹幕失败"
+  --       return
+  --     end
+  --     if data.error then
+  --       if data.error == "VideoPathError" then
+  --         mp.msg.verbose(
+  --           "Skip video "
+  --             .. data.video
+  --             .. " not in the storage path "
+  --             .. data.storage
+  --         )
+  --         return
+  --       end
+  --     end
+  --     if data.matches ~= nil then
+  --       mp.msg.info "匹配结果不唯一，请手动选择"
+  --       mp.osd_message("匹配结果不唯一，请手动选择", 3)
+  --       MatchResults = data.matches
+  --       return
+  --     end
+  --     EpisodeInfo = data.info
+  --     mp.msg.verbose("弹幕路径:", data.path)
+  --     mp.osd_message(
+  --       string.format(
+  --         "匹配成功：%s (共%d条弹幕)",
+  --         data.desc,
+  --         data.count
+  --       ),
+  --       3
+  --     )
+  --     mp.msg.info(
+  --       string.format(
+  --         "匹配成功：%s (共%d条弹幕)",
+  --         data.desc,
+  --         data.count
+  --       )
+  --     )
+  --     if data.desc_extra ~= nil and #data.desc_extra ~= 0 then
+  --       mp.msg.info(
+  --         string.format(
+  --           "额外弹幕源信息：%s",
+  --           data.desc_extra
+  --         )
+  --       )
+  --     end
+  --     SourceStatus = data.sources
+  --     for k, v in pairs(data.style) do
+  --       mp.msg.verbose(k, v)
+  --     end
+  --     local render = require("lib.danmaku_render"):setup {
+  --       style = data.style,
+  --     }
+  --     render:parse_danmaku(data.path)
+
+  --     bgm.update_metadata().async {
+  --       resp = function(anime_info)
+  --         if not anime_info or not anime_info.bgm_id then
+  --           mp.msg.error "获取番剧元信息失败"
+  --           return
+  --         end
+  --         AnimeInfo = anime_info
+  --         mp.msg.verbose(
+  --           "Bangumi ID:",
+  --           anime_info.bgm_id,
+  --           "Bangumi Url:",
+  --           anime_info.bgm_url
+  --         )
+  --         init_after_bangumi_id()
+  --       end,
+  --     }
+  --   end,
+  -- }
 end
 
 mp.register_event("file-loaded", function()
@@ -272,11 +325,12 @@ mp.register_script_message("toggle-danmaku-visibility", function()
 end)
 
 mp.register_script_message("open-bangumi-url", function()
-  if not AnimeInfo or not AnimeInfo.bgm_url then
+  if not AnimeInfo or not AnimeInfo.bgm_id then
     mp.msg.error "未匹配到番剧信息"
     return
   end
-  bgm.open_url(AnimeInfo.bgm_url).execute()
+  bgm.open_url(AnimeInfo.bgm_id)
+  notify("网页打开成功", 2)
 end)
 
 mp.register_script_message("manual-match", function()
@@ -494,4 +548,39 @@ mp.register_script_message("niconico-danmaku", function()
       update_status_and_reload_danmaku()
     end
   }
+end)
+
+
+mp.register_script_message("mpvbangumi-action", function(_args)
+  local args = mp_utils.parse_json(_args)
+  if type(args) ~= "table" then
+    mp.msg.error("Json parse error: ", args)
+    return
+  end
+
+  local action = args.action
+  local data = args.data
+
+  if action == "log" then
+    handle_log(data.level, data.msg)
+  elseif action == "match" then
+    EpisodeInfo = data.info
+    notify(
+      string.format(
+        "匹配成功：%s",
+        data.desc
+      )
+    )
+  elseif action == "sources" then
+    SourceStatus = data
+  elseif action == "set-danmaku" then
+    danmaku_render:setup(data.events, data.style)
+  elseif action == "set-bangumi-id" then
+    AnimeInfo = data
+  end
+end)
+mp.register_event("shutdown", function()
+  PY.ensure_gil()
+  Bgm.close()
+  PY.finalize()
 end)

@@ -1,3 +1,4 @@
+import contextlib
 import sqlite3
 from typing import Any, Callable, Literal, NamedTuple, TypedDict, Unpack, NotRequired
 from bgm import DATA_PATH
@@ -6,6 +7,7 @@ import json
 import datetime
 from bgm import logger
 from pathlib import Path
+import portalocker
 
 from bgm.utils import extract_info_from_filename
 
@@ -147,6 +149,8 @@ class DB:
     def is_outdated(path: Path, max_age: int = 3600 * 4) -> bool:
         if not path.exists():
             return True
+        if path.stat().st_size == 0:
+            return True
         if datetime.datetime.now().timestamp() - path.stat().st_mtime > max_age:
             return True
         return False
@@ -174,6 +178,50 @@ class DB:
         else:
             raise ValueError(f"Unknown type: {type_}")
         return path
+
+    @contextlib.asynccontextmanager
+    async def check_update_async(self, path: Path, max_age: int = 3600 * 4):
+        if not self.is_outdated(path, max_age):
+            yield None
+            return
+
+        with portalocker.Lock(
+            path, mode="a+", flags=portalocker.LockFlags.EXCLUSIVE
+        ) as f:
+            if not self.is_outdated(path, max_age):
+                yield None
+                return
+
+            def safe_write(content: str):
+                f.seek(0)
+                f.truncate(0)
+
+                f.write(content)
+                f.flush()
+
+            yield safe_write
+
+    @contextlib.contextmanager
+    def check_update(self, path: Path, max_age: int = 3600 * 4):
+        if not self.is_outdated(path, max_age):
+            yield None
+            return
+
+        with portalocker.Lock(
+            path, mode="a+", flags=portalocker.LockFlags.EXCLUSIVE
+        ) as f:
+            if not self.is_outdated(path, max_age):
+                yield None
+                return
+
+            def safe_write(content: str):
+                f.seek(0)
+                f.truncate(0)
+
+                f.write(content)
+                f.flush()
+
+            yield safe_write
 
     def get_or_update(
         self,

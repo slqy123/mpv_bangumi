@@ -17,7 +17,7 @@ class DanmakuConfig(BaseModel):
     fontname: str = "sans-serif"
     fontsize: int = 36
     font_size_strict: bool = False
-    shadow: int = 0
+    shadow: int = 1
     bold: bool = True
     density: float = 0.0
     displayarea: float = 0.5
