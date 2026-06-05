@@ -1,5 +1,4 @@
 import json
-import socket
 from typing import Any, Awaitable
 import logging
 from bgm import logger, NOTIFY_LEVEL_NUM
@@ -17,6 +16,7 @@ from bgm.bangumi import (
 from pathlib import Path
 from itertools import chain
 from threading import Lock
+from python_mpv_jsonipc import MPV
 
 
 class MPVLogHandler(logging.Handler):
@@ -43,12 +43,9 @@ class MPVLogHandler(logging.Handler):
 
 
 class MPVBangumi:
-    def __init__(self, ipc_path: str) -> None:
-        self.ipc_path = ipc_path
-        # self.mpv = MPV(start_mpv=False, ipc_socket=ipc_path)
+    def __init__(self, mpv: MPV) -> None:
+        self.mpv = mpv
         self.worker = AsyncWorker()
-        self.socket = socket.socket(socket.AF_UNIX)
-        self.socket.connect(ipc_path)
         self.rid = 0
         self.ipc_command_lock = Lock()
         self.mpv_log_handler = MPVLogHandler(sender=self.resp_message)
@@ -60,7 +57,6 @@ class MPVBangumi:
     def close(self):
         self.worker.stop()
         logger.removeHandler(self.mpv_log_handler)
-        self.socket.close()
 
     def update_comments(self, source: str, comments: Any):
         """comments in dandanplay style"""
@@ -82,28 +78,21 @@ class MPVBangumi:
         self.worker.submit_task(task)
 
     def resp_message(self, action: str, data: Any):
-        with self.ipc_command_lock:
-            self.rid += 1
-            self.socket.send(
-                json.dumps(
-                    {
-                        "command": [
-                            "script-message",
-                            "mpvbangumi-action",
-                            json.dumps(
-                                {"action": action, "data": data},
-                                ensure_ascii=True,
-                            ),
-                        ],
-                        "request_id": self.rid,
-                    },
-                ).encode("utf-8")
-                + b"\n"
-            )
-            self.socket.recv(1024)
+        self.mpv.command(
+            "script-message",
+            "mpvbangumi-action",
+            json.dumps(
+                {"action": action, "data": data},
+                ensure_ascii=True,
+            ),
+        )
 
     def send_action(self, action: str, data: Any):
+        if isinstance(data, str):
+            data = json.loads(data)
+
         if action == "match":
+            logger.info("match get")
             self.add_task(
                 match_video(self, Path(data["path"]), force_id=data.get("force_id"))
             )
@@ -136,3 +125,4 @@ class MPVBangumi:
             import webbrowser
 
             webbrowser.open(f"https://bgm.tv/subject/{int(data['bgm_id'])}")
+            

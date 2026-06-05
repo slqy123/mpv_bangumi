@@ -4,15 +4,17 @@ local mp_utils = require "mp.utils"
 local M = {}
 
 function M.send_action(action, data)
-  PY.ensure_gil()
-  Bgm.send_action(action, PY.dict(data))
-  PY.release_gil()
+  mp.set_property(PROPERTY_DISPATCH, mp_utils.format_json(
+    {
+      action = action,
+      data = data
+    }
+  ))
 end
-
 -- force id will skip the matching process and use the provided id directly
 function M.match(force_id)
   local file_path = mp.get_property "path"
-  file_path = mp.command_native({"normalize-path", file_path})
+  file_path = mp.command_native({ "normalize-path", file_path })
   local file_info = mp_utils.file_info(file_path)
 
   if not file_info or not file_info.is_file then
@@ -26,7 +28,6 @@ function M.match(force_id)
     force_id = force_id
   })
 end
-
 function M.send_danmaku(episode_id, comment)
   local color = NamedColors[Options.user_default_danmaku_color]
   local position_map = {
@@ -126,48 +127,27 @@ function M.update_bangumi_collection()
   }
 end
 
-function M.fetch_episodes()
-  if not AnimeInfo.bgm_id then
-    mp.msg.error "未匹配到Bangumi ID，更新剧集失败"
-    return utils.subprocess_err()
-  end
-  local file_path = mp.get_property "path"
-  file_path = mp.command_native({"normalize-path", file_path})
-  local file_info = mp_utils.file_info(file_path)
-
-  if not file_info or not file_info.is_file then
-    mp.msg.error("文件不存在或不是有效的文件: " .. file_path)
-    return utils.subprocess_err()
-  end
-
-  return utils.subprocess_wrapper {
-    Options.bgm_path,
-    "bangumi",
-    "fetch-episodes",
-    file_path,
-  }
-end
-
 function M.update_episode()
   if not AnimeInfo.bgm_id then
     mp.msg.error "未匹配到Bangumi ID，更新剧集失败"
-    return utils.subprocess_err()
+    return
   end
+
+  if not EpisodeInfo.episodeId then
+    mp.msg.error "未匹配到dandanplay ID，更新剧集失败"
+    return
+  end
+
   local file_path = mp.get_property "path"
-  file_path = mp.command_native({"normalize-path", file_path})
+  file_path = mp.command_native({ "normalize-path", file_path })
   local file_info = mp_utils.file_info(file_path)
 
   if not file_info or not file_info.is_file then
     mp.msg.error("文件不存在或不是有效的文件: " .. file_path)
-    return utils.subprocess_err()
+    return
   end
 
-  return utils.subprocess_wrapper {
-    Options.bgm_path,
-    "bangumi",
-    "update-episode",
-    file_path,
-  }
+  M.send_action("update-bangumi-episode", { bgm_id = AnimeInfo.bgm_id, episode_id=EpisodeInfo.episodeId })
 end
 
 function M.dandanplay_search(keyword)

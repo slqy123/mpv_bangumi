@@ -8,10 +8,10 @@ local danmaku_render = require "lib.danmaku_render"
 
 -- globals constants
 
-PY = require "luapython"
-PY.load_prefix(mp_utils.join_path(mp.get_script_directory(), "bgm/.venv"))
+PROPERTY_DISPATCH = "user-data/mpv_bangumi/dispatch"
+
 Pid = mp_utils.getpid()
-Bgm = nil  -- init in init_bgm()
+BgmReady = false
 
 -- global variables
 Delay = 0
@@ -22,7 +22,6 @@ BangumiSucessFlag = 0
 MatchResults = nil
 InputID = nil  -- fix race condition for mp.input, need https://github.com/mpv-player/mpv/pull/17256
 SourceStatus = nil
-ActionCallbacks = {}
 
 local function reset_globals()
   -- Delay = 0
@@ -37,7 +36,6 @@ local function reset_globals()
   input.terminate(InputID)
   InputID = nil
   SourceStatus = nil
-  ActionCallbacks = {}
 end
 
 local handle_log = function(level, msg, timeout)
@@ -61,7 +59,7 @@ end
 local notify = function(msg, timeout) handle_log("notify", msg, timeout) end
 
 local function init_bgm()
-  if Bgm ~= nil then
+  if BgmReady then
     return
   end
 
@@ -81,14 +79,34 @@ local function init_bgm()
     end
   end)
 
-  PY.ensure_gil()
-  Bgm = PY.import("bgm.mpvbangumi").MPVBangumi({
-    ipc_path = ipc_path
-  })
-  PY.release_gil()
+  mp_utils.subprocess_detached({args={Options.bgm_path, ipc_path}})
 end
 
-
+local function init_bangumi_timer()
+  UpdateEpisodeTimer = mp.add_periodic_timer(5, function()
+    local current_time = mp.get_property_number "time-pos"
+    local total_time = mp.get_property_number "duration"
+    if not current_time or not total_time then
+      return
+    end
+    local ratio = current_time / total_time
+    if ratio < 0.8 then
+      return
+    end
+    if AnimeInfo == nil then
+      mp.msg.verbose "No AnimeInfo, skip update"
+      return
+    end
+    if UpdateEpisodeTimer then
+      UpdateEpisodeTimer:kill()
+      UpdateEpisodeTimer = nil
+      bgm.update_episode()
+    else
+      mp.msg.error "Unexpected value: UpdateEpisodeTimer = nil"
+      return
+    end
+  end)
+end
 local function init_after_bangumi_id()
   bgm.update_bangumi_collection().async {
     resp = function(resp)
@@ -112,48 +130,17 @@ local function init_after_bangumi_id()
       mp.msg.error("获取剧集信息失败:", err)
     end,
   }
-  UpdateEpisodeTimer = mp.add_periodic_timer(5, function()
-    local current_time = mp.get_property_number "time-pos"
-    local total_time = mp.get_property_number "duration"
-    if not current_time or not total_time then
-      return
-    end
-    local ratio = current_time / total_time
-    if ratio < 0.8 then
-      return
-    end
-    if BangumiSucessFlag ~= 2 then
-      mp.msg.verbose "Bangumi collection or episodes not updated or failed, skip update."
-      return
-    end
-    if UpdateEpisodeTimer then
-      UpdateEpisodeTimer:kill()
-      UpdateEpisodeTimer = nil
-      bgm.update_episode().async {
-        resp = function(data)
-          if data.skipped then
-            mp.msg.verbose "同步Bangumi追番记录进度成功（无需更新）"
-          else
-            mp.msg.info "同步Bangumi追番记录进度成功"
-          end
-        end,
-        err = function(err)
-          mp.msg.error("更新当前集信息失败:", err)
-          mp.osd_message("同步Bangumi追番记录进度失败", 3)
-        end,
-      }
-    else
-      mp.msg.error "Unexpected value: UpdateEpisodeTimer = nil"
-      return
-    end
-  end)
 end
+
 local function init(episode_id)
   reset_globals()
-  init_bgm()
+  if BgmReady then
+    bgm.match(episode_id)
+  else
+    init_bgm()
+  end
 
-  bgm.match(episode_id)
-
+  -- bgm.match(episode_id)
   -- bgm.match(episode_id).async {
   --   resp = function(data)
   --     if not data then
@@ -563,6 +550,10 @@ mp.register_script_message("mpvbangumi-action", function(_args)
 
   if action == "log" then
     handle_log(data.level, data.msg)
+  elseif action == "ready" then
+    mp.msg.info("mpv python ipc ready")
+    BgmReady = true
+    init()
   elseif action == "match" then
     EpisodeInfo = data.info
     notify(
@@ -577,10 +568,6 @@ mp.register_script_message("mpvbangumi-action", function(_args)
     danmaku_render:setup(data.events, data.style)
   elseif action == "set-bangumi-id" then
     AnimeInfo = data
+    init_bangumi_timer()
   end
-end)
-mp.register_event("shutdown", function()
-  PY.ensure_gil()
-  Bgm.close()
-  PY.finalize()
 end)
