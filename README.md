@@ -50,3 +50,17 @@ pip install -e .
 - `ALT-.`: 显示/隐藏 弹幕
 - `ALT-Z/ALT-X`: 调整弹幕延迟
 - `ALT-N`: N站弹幕设置
+
+## 一些碎碎念
+
+从项目名字就能看出，原本这个项目是只想做bangumi的自动同步功能的，但由于uosc_danmaku也会用到dandanplay的api，这会涉及到重复的API请求。
+
+加上uosc_danmaku的功能太多架构太复杂，有很多我不需要的功能。（如dandanplay以外的其他弹幕源支持，uosc集成）
+索性就把核心的弹幕渲染功能拿出来重写了一下，后续自己想添加其他的功能也更方便。
+
+那为什么选Python呢？那当然是因为~~Python是世界上最好的编程语言。~~
+
+好吧我也觉得这样依赖第三方程序调用的实现有点不优雅，不过最新版换成了IPC实现，整个mpv的生命周期内只会有一次Python调用，算是能接受的overhead了。
+
+其实一开始尝试过使用embedded python做一个lua C 拓展，参考[luapython](https://github.com/imitoy/luapython)的实现，但原项目有很多功能还不太完善。
+缺少`venv`和多线程的支持，在被GIL各种奇奇怪怪的死锁折腾得死去活来之后，我放弃了这个方案，也不知道mpv的官方python支持要等到猴年马月╮(╯_╰)╭。
