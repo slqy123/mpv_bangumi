@@ -21,7 +21,6 @@ from bgm.danmaku import (
     get_style_config,
 )
 from bgm.db import EpisodeMatch, db
-from bgm.source import get_source_danmaku
 from bgm.utils import extract_info_from_filename
 from bgm.api import API
 
