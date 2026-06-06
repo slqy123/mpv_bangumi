@@ -99,7 +99,7 @@ class BangumiAPI(API):
             self.username = await self.get_username()
             if self.username is None:
                 logger.error("Failed to get username, please check your access token.")
-                exit(-1)
+                return
             username_data[self.ACCESS_TOKEN] = self.username
             with open(username_file, "w", encoding="utf-8") as f:
                 json.dump(username_data, f)

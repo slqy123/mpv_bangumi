@@ -201,7 +201,7 @@ class DanDanAPI(API):
     async def renew_token(self):
         if not AUTHENTICATION_TOKEN:
             logger.error("No authentication token found.")
-            exit(-1)
+            return
         return await self.get("login/renew")
 
     async def comment(
@@ -220,7 +220,7 @@ class DanDanAPI(API):
         j = await self.get(f"bangumi/{anime_id}")
         if not j["success"]:
             logger.error("Failed to get anime info: %s", j["errorMessage"])
-            exit(-1)
+            return
         return j["bangumi"]
 
     async def search_anime(self, keyword: str, type_: str | None = None):
@@ -239,19 +239,19 @@ class DanDanAPI(API):
 
 async def get_match_info(
     video_path: Path,
-) -> list[EpisodeMatch]:
+) -> list[EpisodeMatch]|None:
     """Get match info from video path."""
     video_path = video_path.absolute()
     if not check_video(video_path):
         logger.error(f"Not a video file: {video_path}")
-        exit(-1)
+        return
 
     info = get_info(video_path)
     async with DanDanAPI() as api:
         match_results: list[EpisodeMatch] = (await api.match(info))
     if not match_results:
         logger.error(f"No match found for: {info.filename}")
-        exit(-1)
+        return
 
     if len(match_results) > 1:
         logger.warning(f"Multiple results for: {info.filename}")
@@ -264,7 +264,10 @@ async def construct_episode_match(episode_id: int) -> EpisodeMatch | None:
     async with db.check_update_async(info_path) as writer:
         if writer:
             async with DanDanAPI() as api:
-                writer(json.dumps(await api.get_anime_info(episode_id // 10000)))
+                info = await api.get_anime_info(episode_id // 10000)
+                if info is None:
+                    return
+                writer(json.dumps(info))
     anime_info = json.loads(info_path.read_text(encoding="utf-8"))
     try:
         episode_part = (
@@ -287,6 +290,8 @@ async def construct_episode_match(episode_id: int) -> EpisodeMatch | None:
 
 async def api_match_danmaku(ctx: 'MPVBangumi', video: Path):
     episode_info = await get_match_info(video)
+    if episode_info is None:
+        return
     if len(episode_info) > 1:
         ctx.resp_message(
             "select-match",
@@ -405,9 +410,10 @@ async def get_bgm_id(video: Path, anime_id: int):
     async with db.check_update_async(info_path, 3600 * 24) as writer:
         if writer is not None:
             async with DanDanAPI() as api:
-                writer(
-                    json.dumps(await api.get_anime_info(anime_id), ensure_ascii=True)
-                )
+                info = await api.get_anime_info(anime_id)
+                if info is None:
+                    return
+                writer(json.dumps(info, ensure_ascii=True))
 
     info = json.loads(info_path.read_text(encoding="utf-8"))
 
@@ -426,6 +432,8 @@ async def dandanplay_login_or_update():
             logger.debug("Try renew authentication token.")
             async with DanDanAPI() as api:
                 j = await api.renew_token()
+                if j is None:
+                    return
             if j.get("token"):
                 logger.debug("Renew authentication token successful.")
                 with open(AUTHENTICATION_TOKEN_PATH, "w") as f:
@@ -526,7 +534,10 @@ async def dandanplay_get_episodes(ctx: "MPVBangumi", anime_id: int):
     async with db.check_update_async(info_path) as writer:
         if writer:
             async with DanDanAPI() as api:
-                writer(json.dumps(await api.get_anime_info(anime_id)))
+                info = await api.get_anime_info(anime_id)
+                if info is None:
+                    return
+                writer(json.dumps(info))
 
     episodes = json.loads(info_path.read_text(encoding="utf-8"))["episodes"]
     ctx.resp_message(
@@ -536,4 +547,3 @@ async def dandanplay_get_episodes(ctx: "MPVBangumi", anime_id: int):
             for episode in episodes
         ],
     )
-
