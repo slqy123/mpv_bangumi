@@ -1,8 +1,19 @@
-import contextlib
 import json
 from pathlib import Path
+from typing import Literal
 from bgm.config import config
 from bgm import DATA_PATH, logger
+from pydantic import BaseModel
+
+
+class DanmakuEvent(BaseModel):
+    start_time: float
+    end_time: float
+    style: Literal["R2L", "TOP"]
+    text: str
+    pos: tuple[int, int] | None
+    move: tuple[int, int, int, int] | None
+    color: str
 
 
 # R2L danmaku algorithm
@@ -84,105 +95,159 @@ def get_str_len(text, fontSizeSet):
     return width * fontSizeSet * 5 / 12
 
 
-def draw_normal_danmaku(
-    ass_file,
+def format_time(seconds):
+    """Convert seconds to ASS time format (H:MM:SS.cc)"""
+    hours = int(seconds / 3600)
+    minutes = int((seconds % 3600) / 60)
+    seconds = seconds % 60
+    centiseconds = int((seconds % 1) * 100)
+    seconds = int(seconds)
+    return f"{hours}:{minutes:02d}:{seconds:02d}.{centiseconds:02d}"
+
+
+class DanmakuArray:
+    def __init__(self, solution_x=1920, solution_y=1080, font_size=38):
+        """
+        Args:
+            solution_x (int): resolution_x
+            solution_y (int): resolution_y
+            font_size (int): font_size
+        """
+        self.solution_x = solution_x
+        self.solution_y = solution_y
+        self.font_size = font_size
+        self.rows = int(solution_y / font_size)
+        self.time_length_array = [[-1, 0] for _ in range(self.rows)]
+
+    def set_time_length(self, row, time, length):
+        """Set time and length for a row"""
+        if 0 <= row < self.rows:
+            self.time_length_array[row] = [time, length]
+        else:
+            raise IndexError("Array index out of range")
+
+    def get_time(self, row):
+        """Get time for a row"""
+        if 0 <= row < self.rows:
+            return self.time_length_array[row][0]
+        else:
+            raise IndexError("Array index out of range")
+
+    def get_length(self, row):
+        """Get length for a row"""
+        if 0 <= row < self.rows:
+            return self.time_length_array[row][1]
+        else:
+            raise IndexError("Array index out of range")
+
+
+def draw_danmaku(
     root,
     font_size,
     roll_array,
     btm_array,
     resolution_x,
     resolution_y,
-    roll_time,
-    fix_time,
-):
-    from dmconvert.utils import format_time, remove_emojis
+    roll_time: int | float,
+    fix_time: int | float,
+) -> list[DanmakuEvent]:
+    # Convert each danmaku
+    events: list[DanmakuEvent] = []
+    all_normal_danmaku = root.findall(".//d")
+    for d in all_normal_danmaku:
+        # Parse attributes
+        p_attrs = d.get("p").split(",")
+        appear_time = float(p_attrs[0])
+        danmaku_type = int(p_attrs[1])
 
-    with open(ass_file, "a", encoding="utf-8") as f:
-        # Convert each danmaku
-        all_normal_danmaku = root.findall(".//d")
-        for d in all_normal_danmaku:
-            # Parse attributes
-            p_attrs = d.get("p").split(",")
-            appear_time = float(p_attrs[0])
-            danmaku_type = int(p_attrs[1])
+        # Convert color from decimal to hex
+        color = int(p_attrs[3])
+        color_hex = hex(color)
+        color_reverse = "".join(
+            reversed([color_hex[i : i + 2] for i in range(0, len(color_hex), 2)])
+        )
+        color_hex = color_reverse[:-2].ljust(6, "0").upper()  # Remove 0x
+        color_text = f"\\c&H{color_hex}"
 
-            # Convert color from decimal to hex
-            color = int(p_attrs[3])
-            color_hex = hex(color)
-            color_reverse = "".join(
-                reversed([color_hex[i : i + 2] for i in range(0, len(color_hex), 2)])
+        # text = remove_emojis(d.text, ".")
+        text = d.text.strip()
+
+        # For rolling danmakus (most common type)
+        if danmaku_type == 1:
+            end_time = appear_time + roll_time
+            style = "R2L"
+            text_length = get_str_len(
+                text, font_size
+            )  # Estimate the length of the text
+            x1 = resolution_x + int(text_length / 2)  # Start from right edge
+            x2 = -int(text_length / 2)  # End at left edge
+            y = get_position_y(
+                font_size,
+                appear_time,
+                text_length,
+                resolution_x,
+                roll_time,
+                roll_array,
             )
-            color_hex = color_reverse[:-2].ljust(6, "0").upper()  # Remove 0x
-            color_text = f"\\c&H{color_hex}"
+            # effect = f"\\move({x1},{y},{x2},{y})"
+            move = (x1, y, x2, y)
+            pos = None
 
-            # Format times
-            start_time = format_time(appear_time)
+        # For BTM danmakus
+        else:
+            end_time = appear_time + fix_time
+            style = "TOP"
+            x = int(resolution_x / 2)
+            y = get_fixed_y(font_size, appear_time, resolution_y, btm_array)
+            # effect = f"\\pos({x},{y})"
+            move = None
+            pos = (x, y)
 
-            # Format text
-            # text = remove_emojis(d.text, ".")
-            text = d.text.strip()
-
-            # For rolling danmakus (most common type)
-            if danmaku_type == 1:
-                layer = 0
-                end_time = format_time(appear_time + roll_time)
-                style = "R2L"
-                text_length = get_str_len(
-                    text, font_size
-                )  # Estimate the length of the text
-                x1 = resolution_x + int(text_length / 2)  # Start from right edge
-                x2 = -int(text_length / 2)  # End at left edge
-                y = get_position_y(
-                    font_size,
-                    appear_time,
-                    text_length,
-                    resolution_x,
-                    roll_time,
-                    roll_array,
-                )
-                effect = f"\\move({x1},{y},{x2},{y})"
-
-            # For BTM danmakus
-            else:
-                layer = 1
-                end_time = format_time(appear_time + fix_time)
-                style = "TOP"
-                x = int(resolution_x / 2)
-                y = get_fixed_y(font_size, appear_time, resolution_y, btm_array)
-                effect = f"\\pos({x},{y})"
-
-            line = f"Dialogue: {layer},{start_time},{end_time},{style},,0000,0000,0000,,{{{effect}}}{{{color_text}}}{text}\n"
-            f.write(line)
+        # line = f"Dialogue: {layer},{start_time},{end_time},{style},,0000,0000,0000,,{{{effect}}}{{{color_text}}}{text}\n"
+        # f.write(line)
+        events.append(
+            DanmakuEvent(
+                start_time=appear_time,
+                end_time=end_time,
+                style=style,
+                text=text,
+                pos=pos,
+                move=move,
+                color=color_text,
+            )
+        )
+    return events
 
 
-def convert_dandanplay_json2ass_pylib(
-    dandanplay_json: Path,
-    output_file: Path,
-    font_size: int,
-    resolution: tuple[int, int],
-):
-    from dmconvert.header.header import draw_ass_header
-    from dmconvert.normal.normal_handler import DanmakuArray
+def convert_dandanplay_json2danmaku_events(
+    dandanplay_json: Path | list[dict] | dict,
+    font_size: int = 36,
+    resolution: tuple[int, int] = (1920, 1080),
+) -> list[DanmakuEvent]:
     import xml.etree.ElementTree as ET
 
-    with open(dandanplay_json, "r", encoding="utf-8") as f:
-        danmaku_data = json.load(f)
+    def __get_timestamp(o):
+        p = o.get("p")
+        if not p:
+            return 0
+        # timestamp, mode, *_ = p.split(",", 2)
+        # return (int(mode), float(timestamp))
+        timestamp, *_ = p.split(",", 1)
+        return float(timestamp)
 
-        def __get_timestamp(o):
-            p = o.get("p")
-            if not p:
-                return 0
-            # timestamp, mode, *_ = p.split(",", 2)
-            # return (int(mode), float(timestamp))
-            timestamp, *_ = p.split(",", 1)
-            return float(timestamp)
-
-        danmaku_data["comments"] = sorted(danmaku_data["comments"], key=__get_timestamp)
+    if isinstance(dandanplay_json, Path):
+        danmaku_data = json.loads(dandanplay_json.read_text(encoding="utf-8"))
+    elif isinstance(dandanplay_json, dict):
+        danmaku_data = dandanplay_json["comments"]
+    else:
+        danmaku_data = dandanplay_json
+    assert isinstance(danmaku_data, list)
+    danmaku_data = sorted(danmaku_data, key=__get_timestamp)
 
     root = ET.Element("i")
 
     danmaku_set = set()
-    for danmaku in danmaku_data["comments"]:
+    for danmaku in danmaku_data:
         p = danmaku.get("p")
         m = danmaku.get("m")
         shift = float(danmaku.get("shift", 0))
@@ -194,7 +259,7 @@ def convert_dandanplay_json2ass_pylib(
         if (m, timestamp) in danmaku_set:
             continue
         danmaku_set.add((m, timestamp))
-        
+
         timestamp = float(timestamp) + shift
         p = f"{timestamp},{mode},25,{color},,,,"
         element = ET.SubElement(
@@ -202,17 +267,7 @@ def convert_dandanplay_json2ass_pylib(
         )
         element.text = m
 
-    draw_ass_header(
-        output_file,
-        resolution_x=resolution[0],
-        resolution_y=resolution[1],
-        font_size=font_size,
-        sc_font_size=font_size,
-    )
-
-    # with contextlib.redirect_stdout(None):
-    draw_normal_danmaku(
-        output_file,
+    return draw_danmaku(
         root=root,
         font_size=font_size,
         roll_array=DanmakuArray(*resolution, font_size),
@@ -220,7 +275,7 @@ def convert_dandanplay_json2ass_pylib(
         resolution_x=resolution[0],
         resolution_y=resolution[1],
         roll_time=config.danmaku.scrolltime,
-        fix_time=5,
+        fix_time=config.danmaku.fixtime,
     )
 
 
@@ -228,6 +283,7 @@ def convert_dandanplay_json2ass_legacy(
     dandanplay_json: Path,
     ass_output: Path,
 ):
+    raise NotImplementedError
     from sh import Command
     import shutil
 
@@ -306,13 +362,6 @@ def generate_ass_events(ass_input: Path) -> str:
     return "\n".join(res)
 
 
-convert_dandanplay_json2ass = (
-    convert_dandanplay_json2ass_legacy
-    if config.danmaku.danmaku_engine == "DanmakuFactory"
-    else lambda i, o: convert_dandanplay_json2ass_pylib(i, o, 36, (1920, 1080))
-)
-
-
 def get_style_config():
     """style config for danmaku_render.lua"""
     return dict(
@@ -323,4 +372,6 @@ def get_style_config():
         displayarea=config.danmaku.displayarea,
         outline=config.danmaku.outline,
         transparency=config.danmaku.transparency,
+        scrolltime=config.danmaku.scrolltime,
+        fixtime=config.danmaku.fixtime,
     )

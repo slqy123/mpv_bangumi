@@ -3,30 +3,31 @@ local mp_utils = require "mp.utils"
 
 local M = {}
 
+function M.send_action(action, data)
+  mp.set_property(PROPERTY_DISPATCH, mp_utils.format_json(
+    {
+      action = action,
+      data = data
+    }
+  ))
+end
 -- force id will skip the matching process and use the provided id directly
 function M.match(force_id)
   local file_path = mp.get_property "path"
-  file_path = mp.command_native({"normalize-path", file_path})
+  file_path = mp.command_native({ "normalize-path", file_path })
   local file_info = mp_utils.file_info(file_path)
 
   if not file_info or not file_info.is_file then
     mp.msg.error("文件不存在或不是有效的文件: " .. file_path)
-    return utils.subprocess_err()
-  end
-  local args = {
-    Options.bgm_path,
-    "dandanplay",
-    "fetch",
-    file_path,
-  }
-  if force_id then
-    table.insert(args, "--force-id")
-    table.insert(args, tostring(force_id))
+    mp.osd_message("文件不存在或不是有效的文件: " .. file_path, 3)
+    return
   end
 
-  return utils.subprocess_wrapper(args)
+  M.send_action("match", {
+    path = file_path,
+    force_id = force_id
+  })
 end
-
 function M.send_danmaku(episode_id, comment)
   local color = NamedColors[Options.user_default_danmaku_color]
   local position_map = {
@@ -74,20 +75,12 @@ function M.send_danmaku(episode_id, comment)
   end
 
   local time_pos = mp.get_property_number "time-pos" - Delay
-  return utils.subprocess_wrapper {
-    Options.bgm_path,
-    "dandanplay",
-    "comment",
-    comment,
-    "--episode-id",
-    tostring(episode_id),
-    "--color",
-    tostring(color),
-    "--position",
-    tostring(position),
-    "--time",
-    tostring(time_pos),
-  }
+  M.send_action("comment", {
+    episode_id = episode_id,
+    color = color,
+    position = position,
+    time = time_pos
+  })
 end
 
 function M.update_metadata()
@@ -108,12 +101,8 @@ function M.update_metadata()
   }
 end
 
-function M.open_url(url)
-  return utils.subprocess_wrapper {
-    Options.bgm_path,
-    "open-url",
-    url,
-  }
+function M.open_url(bgm_id)
+  M.send_action("open-bangumi-url", { bgm_id = bgm_id })
 end
 
 function M.update_bangumi_collection()
@@ -130,76 +119,42 @@ function M.update_bangumi_collection()
   }
 end
 
-function M.fetch_episodes()
-  if not AnimeInfo.bgm_id then
-    mp.msg.error "未匹配到Bangumi ID，更新剧集失败"
-    return utils.subprocess_err()
-  end
-  local file_path = mp.get_property "path"
-  file_path = mp.command_native({"normalize-path", file_path})
-  local file_info = mp_utils.file_info(file_path)
-
-  if not file_info or not file_info.is_file then
-    mp.msg.error("文件不存在或不是有效的文件: " .. file_path)
-    return utils.subprocess_err()
-  end
-
-  return utils.subprocess_wrapper {
-    Options.bgm_path,
-    "bangumi",
-    "fetch-episodes",
-    file_path,
-  }
-end
-
 function M.update_episode()
   if not AnimeInfo.bgm_id then
     mp.msg.error "未匹配到Bangumi ID，更新剧集失败"
-    return utils.subprocess_err()
+    return
   end
+
+  if not EpisodeInfo.episodeId then
+    mp.msg.error "未匹配到dandanplay ID，更新剧集失败"
+    return
+  end
+
   local file_path = mp.get_property "path"
-  file_path = mp.command_native({"normalize-path", file_path})
+  file_path = mp.command_native({ "normalize-path", file_path })
   local file_info = mp_utils.file_info(file_path)
 
   if not file_info or not file_info.is_file then
     mp.msg.error("文件不存在或不是有效的文件: " .. file_path)
-    return utils.subprocess_err()
+    return
   end
 
-  return utils.subprocess_wrapper {
-    Options.bgm_path,
-    "bangumi",
-    "update-episode",
-    file_path,
-  }
+  M.send_action("update-bangumi-episode", { bgm_id = AnimeInfo.bgm_id, episode_id=EpisodeInfo.episodeId })
 end
 
 function M.dandanplay_search(keyword)
-  return utils.subprocess_wrapper {
-    Options.bgm_path,
-    "dandanplay",
-    "search",
-    keyword,
-  }
+  M.send_action("search", { keyword = keyword })
 end
 
 function M.get_dandanplay_episodes(anime_id)
-  return utils.subprocess_wrapper {
-    Options.bgm_path,
-    "dandanplay",
-    "get-episodes",
-    tostring(anime_id),
-  }
+  M.send_action("get-episodes", { anime_id = anime_id })
 end
 
-function M.update_source_status(anime_id, source_status)
-  return utils.subprocess_wrapper {
-    Options.bgm_path,
-    "source",
-    "set-status",
-    tostring(anime_id),
-    mp_utils.format_json(source_status)
-  }
+function M.update_source_status(episode_info, source_status)
+  M.send_action("set-source-status", {
+    episode_info = episode_info,
+    status = source_status
+  })
 end
 
 return M

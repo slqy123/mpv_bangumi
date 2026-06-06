@@ -4,16 +4,14 @@ local bgm = require "lib.bgm"
 local mp_utils = require "mp.utils"
 local utils = require "lib.utils"
 local input = require "mp.input"
+local danmaku_render = require "lib.danmaku_render"
 
 -- globals constants
 
+PROPERTY_DISPATCH = "user-data/mpv_bangumi/dispatch"
+
 Pid = mp_utils.getpid()
-CacheDir = mp_utils.join_path(
-  mp.command_native { "expand-path", "~~cache/" },
-  "mpv_danmaku"
-)
-mp.msg.verbose("CacheDir:", CacheDir)
-os.execute("mkdir " .. CacheDir)
+BgmReady = false
 
 -- global variables
 Delay = 0
@@ -40,29 +38,51 @@ local function reset_globals()
   SourceStatus = nil
 end
 
-local function init_after_bangumi_id()
-  bgm.update_bangumi_collection().async {
-    resp = function(resp)
-      if resp.update_message then
-        mp.osd_message(resp.update_message, 3)
-      else
-        mp.msg.verbose "Collection status unchanged"
-      end
-      BangumiSucessFlag = BangumiSucessFlag + 1
-    end,
-    err = function(err)
-      mp.msg.error("更新Bangumi条目失败:", err)
-    end,
-  }
-  bgm.fetch_episodes().async {
-    resp = function(_)
-      mp.msg.verbose "Fetch episodes success"
-      BangumiSucessFlag = BangumiSucessFlag + 1
-    end,
-    err = function(err)
-      mp.msg.error("获取剧集信息失败:", err)
-    end,
-  }
+local handle_log = function(level, msg, timeout)
+  timeout = timeout or 3
+  if level == "verbose" then
+    mp.msg.verbose(msg)
+  elseif level == "info" then
+    mp.msg.info(msg)
+  elseif level == "warn" then
+    mp.msg.warn(msg)
+  elseif level == "error" then
+    mp.msg.error(msg)
+    mp.osd_message(msg, timeout)
+  elseif level == "notify" then
+    mp.msg.info(msg)
+    mp.osd_message(msg, timeout)
+  else
+    mp.msg.error("Unkonw log level", level)
+  end
+end
+local notify = function(msg, timeout) handle_log("notify", msg, timeout) end
+
+local function init_bgm()
+  if BgmReady then
+    return
+  end
+
+  local ipc_path = ""
+  if package.config:sub(1,1) == "\\" then
+      -- Windows syntax for named pipes
+      ipc_path = [[\\.\pipe\mpv-ipc-]] .. Pid
+  else
+      -- Linux / macOS syntax for Unix domain sockets
+      ipc_path = "/tmp/mpv-ipc-" .. Pid
+  end
+  mp.set_property("input-ipc-server", ipc_path)
+  mp.msg.verbose("IPC Server created: " .. ipc_path)
+  mp.register_event("shutdown", function()
+    if package.config:sub(1, 1) == "\\" then
+      os.remove(ipc_path)
+    end
+  end)
+
+  mp_utils.subprocess_detached({args={Options.bgm_path, ipc_path}})
+end
+
+local function init_bangumi_timer()
   UpdateEpisodeTimer = mp.add_periodic_timer(5, function()
     local current_time = mp.get_property_number "time-pos"
     local total_time = mp.get_property_number "duration"
@@ -73,109 +93,28 @@ local function init_after_bangumi_id()
     if ratio < 0.8 then
       return
     end
-    if BangumiSucessFlag ~= 2 then
-      mp.msg.verbose "Bangumi collection or episodes not updated or failed, skip update."
+    if AnimeInfo == nil then
+      mp.msg.verbose "No AnimeInfo, skip update"
       return
     end
     if UpdateEpisodeTimer then
       UpdateEpisodeTimer:kill()
       UpdateEpisodeTimer = nil
-      bgm.update_episode().async {
-        resp = function(data)
-          if data.skipped then
-            mp.msg.verbose "同步Bangumi追番记录进度成功（无需更新）"
-          else
-            mp.msg.info "同步Bangumi追番记录进度成功"
-          end
-        end,
-        err = function(err)
-          mp.msg.error("更新当前集信息失败:", err)
-          mp.osd_message("同步Bangumi追番记录进度失败", 3)
-        end,
-      }
+      bgm.update_episode()
     else
       mp.msg.error "Unexpected value: UpdateEpisodeTimer = nil"
       return
     end
   end)
 end
+
 local function init(episode_id)
   reset_globals()
-  bgm.match(episode_id).async {
-    resp = function(data)
-      if not data then
-        mp.msg.error "获取弹幕失败"
-        return
-      end
-      if data.error then
-        if data.error == "VideoPathError" then
-          mp.msg.verbose(
-            "Skip video "
-              .. data.video
-              .. " not in the storage path "
-              .. data.storage
-          )
-          return
-        end
-      end
-      if data.matches ~= nil then
-        mp.msg.info "匹配结果不唯一，请手动选择"
-        mp.osd_message("匹配结果不唯一，请手动选择", 3)
-        MatchResults = data.matches
-        return
-      end
-      EpisodeInfo = data.info
-      mp.msg.verbose("弹幕路径:", data.path)
-      mp.osd_message(
-        string.format(
-          "匹配成功：%s (共%d条弹幕)",
-          data.desc,
-          data.count
-        ),
-        3
-      )
-      mp.msg.info(
-        string.format(
-          "匹配成功：%s (共%d条弹幕)",
-          data.desc,
-          data.count
-        )
-      )
-      if data.desc_extra ~= nil and #data.desc_extra ~= 0 then
-        mp.msg.info(
-          string.format(
-            "额外弹幕源信息：%s",
-            data.desc_extra
-          )
-        )
-      end
-      SourceStatus = data.sources
-      for k, v in pairs(data.style) do
-        mp.msg.verbose(k, v)
-      end
-      local render = require("lib.danmaku_render"):setup {
-        style = data.style,
-      }
-      render:parse_danmaku(data.path)
-
-      bgm.update_metadata().async {
-        resp = function(anime_info)
-          if not anime_info or not anime_info.bgm_id then
-            mp.msg.error "获取番剧元信息失败"
-            return
-          end
-          AnimeInfo = anime_info
-          mp.msg.verbose(
-            "Bangumi ID:",
-            anime_info.bgm_id,
-            "Bangumi Url:",
-            anime_info.bgm_url
-          )
-          init_after_bangumi_id()
-        end,
-      }
-    end,
-  }
+  if BgmReady then
+    bgm.match(episode_id)
+  else
+    init_bgm()
+  end
 end
 
 mp.register_event("file-loaded", function()
@@ -210,25 +149,6 @@ end
 -- script messages
 
 mp.register_script_message("send-danmaku", function(comment)
-  local function send_danmaku()
-    bgm.send_danmaku(EpisodeInfo.episodeId, comment).async {
-      resp = function(data)
-        if not data or not data.path then
-          mp.msg.error "发送弹幕功能暂不支持"
-          mp.osd_message("发送弹幕功能暂不支持", 3)
-          return
-        end
-        mp.msg.verbose "弹幕发送成功"
-        mp.osd_message("弹幕发送成功", 3)
-        require("lib.danmaku_render"):parse_danmaku(data.path)
-      end,
-      err = function(err)
-        mp.msg.error("发送弹幕失败:", err)
-        mp.osd_message("发送弹幕失败", 3)
-      end,
-    }
-  end
-
   if not EpisodeInfo or not EpisodeInfo.episodeId then
     mp.msg.error "未匹配到视频信息"
     return
@@ -242,11 +162,11 @@ mp.register_script_message("send-danmaku", function(comment)
         input.terminate(InputID)
         mp.set_property("pause", "no")
         comment = text
-        send_danmaku()
+        bgm.send_danmaku(EpisodeInfo.episodeId, comment)
       end,
     }
   else
-    send_danmaku()
+    bgm.send_danmaku(EpisodeInfo.episodeId, comment)
   end
 end)
 
@@ -272,97 +192,24 @@ mp.register_script_message("toggle-danmaku-visibility", function()
 end)
 
 mp.register_script_message("open-bangumi-url", function()
-  if not AnimeInfo or not AnimeInfo.bgm_url then
+  if not AnimeInfo or not AnimeInfo.bgm_id then
     mp.msg.error "未匹配到番剧信息"
     return
   end
-  bgm.open_url(AnimeInfo.bgm_url).execute()
+  bgm.open_url(AnimeInfo.bgm_id)
+  notify("网页打开成功", 2)
 end)
 
-mp.register_script_message("manual-match", function()
-  local select_episode = function(anime_id)
-    if not anime_id then
-      mp.msg.error "无效的番剧ID"
-      return
-    end
-    bgm.get_dandanplay_episodes(anime_id).async {
-      resp = function(data)
-        if not data or #data == 0 then
-          mp.msg.error "没有找到匹配的剧集"
-          mp.osd_message("没有找到匹配的剧集", 3)
-          return
-        end
-        local episode_items = {}
-        for i, item in ipairs(data) do
-          episode_items[i] = item.title
-        end
-        input.select {
-          prompt = "请选择正确剧集：",
-          items = episode_items,
-          submit = function(idx)
-            if idx < 1 or idx > #data then
-              mp.msg.error "无效的选择"
-              return
-            end
-            local selected_episode = data[idx]
-            mp.msg.verbose(
-              "选择的剧集:",
-              selected_episode.id,
-              selected_episode.title
-            )
-            init(selected_episode.id)
-          end,
-        }
-      end,
-      err = function(err)
-        mp.msg.error("获取剧集信息失败:", err)
-        mp.osd_message("获取剧集信息失败", 3)
-      end,
-    }
-  end
-  local select_anime = function(data)
-    if not data or #data == 0 then
-      mp.msg.error "没有找到匹配的番剧"
-      mp.osd_message("没有找到匹配的番剧", 3)
-      return
-    end
-    local anime_items = {}
-    for i, item in ipairs(data) do
-      anime_items[i] = string.format("%d. %s\t[%s]", i, item.title, item.type)
-    end
-    InputID = input.select {
-      prompt = "请选择正确番剧：",
-      items = anime_items,
-      submit = function(idx)
-        input.terminate(InputID)
-        if idx < 1 or idx > #data then
-          mp.msg.error "无效的选择"
-          return
-        end
-        local selected_anime = data[idx]
-        mp.msg.verbose("选择的番剧:", selected_anime.title)
-        select_episode(selected_anime.id)
-      end,
-    }
-  end
 
+mp.register_script_message("manual-match", function()
   mp.set_property("pause", "yes")
   if not MatchResults then
     InputID = input.get {
       prompt = "请输入番剧名：",
       submit = function(text)
         input.terminate(InputID)
-        bgm.dandanplay_search(text).async {
-          resp = function(data)
-            select_anime(data)
-          end,
-          err = function(err)
-            mp.msg.error("搜索番剧失败:", err)
-            mp.osd_message("搜索番剧失败", 3)
-          end,
-        }
+        bgm.dandanplay_search(text)
       end,
-      -- keep_open = true,
       closed = function()
         mp.set_property("pause", "no")
       end,
@@ -373,7 +220,7 @@ mp.register_script_message("manual-match", function()
   local match_items = {}
   for i, match in ipairs(MatchResults) do
     match_items[i] =
-      string.format("%d. %s\t[%s]", i, match.animeTitle, match.episodeTitle)
+        string.format("%d. %s\t[%s]", i, match.animeTitle, match.episodeTitle)
   end
   match_items[#match_items + 1] = "没有结果，手动搜索"
 
@@ -406,19 +253,64 @@ mp.register_script_message("manual-match", function()
   }
 end)
 
+local select_episode = function(data)
+  if not data or #data == 0 then
+    mp.msg.error "没有找到匹配的剧集"
+    mp.osd_message("没有找到匹配的剧集", 3)
+    return
+  end
+  local episode_items = {}
+  for i, item in ipairs(data) do
+    episode_items[i] = item.title
+  end
+  input.select {
+    prompt = "请选择正确剧集：",
+    items = episode_items,
+    submit = function(idx)
+      if idx < 1 or idx > #data then
+        mp.msg.error "无效的选择"
+        return
+      end
+      local selected_episode = data[idx]
+      mp.msg.verbose(
+        "选择的剧集:",
+        selected_episode.id,
+        selected_episode.title
+      )
+      init(selected_episode.id)
+    end,
+  }
+end
+local select_anime = function(data)
+  if not data or #data == 0 then
+    mp.msg.error "没有找到匹配的番剧"
+    mp.osd_message("没有找到匹配的番剧", 3)
+    return
+  end
+  local anime_items = {}
+  for i, item in ipairs(data) do
+    anime_items[i] = string.format("%d. %s\t[%s]", i, item.title, item.type)
+  end
+  InputID = input.select {
+    prompt = "请选择正确番剧：",
+    items = anime_items,
+    submit = function(idx)
+      input.terminate(InputID)
+      if idx < 1 or idx > #data then
+        mp.msg.error "无效的选择"
+        return
+      end
+      local selected_anime = data[idx]
+      mp.msg.verbose("选择的番剧:", selected_anime.title)
+      bgm.get_dandanplay_episodes(selected_anime.id)
+    end,
+  }
+end
+
+
 mp.register_script_message("niconico-danmaku", function()
   local function update_status_and_reload_danmaku()
-      bgm.update_source_status(EpisodeInfo.animeId, SourceStatus).async {
-        resp = function(data)
-          if data.success then
-            mp.msg.verbose("update source status successfully", data.sources)
-            init()
-          end
-        end,
-        err = function(error)
-          mp.msg.error("Failed to update source status", error)
-        end
-      }
+    bgm.update_source_status(EpisodeInfo, SourceStatus)
   end
 
   if SourceStatus == nil then
@@ -494,4 +386,46 @@ mp.register_script_message("niconico-danmaku", function()
       update_status_and_reload_danmaku()
     end
   }
+end)
+
+
+mp.register_script_message("mpvbangumi-action", function(_args)
+  local args = mp_utils.parse_json(_args)
+  if type(args) ~= "table" then
+    mp.msg.error("Json parse error: ", args)
+    return
+  end
+
+  local action = args.action
+  local data = args.data
+
+  if action == "log" then
+    handle_log(data.level, data.msg)
+  elseif action == "ready" then
+    mp.msg.info("mpv python ipc ready")
+    BgmReady = true
+    init()
+  elseif action == "match" then
+    EpisodeInfo = data.info
+    notify(
+      string.format(
+        "匹配成功：%s",
+        data.desc
+      )
+    )
+  elseif action == "sources" then
+    SourceStatus = data
+  elseif action == "set-danmaku" then
+    danmaku_render:setup(data.events, data.style)
+  elseif action == "set-bangumi-id" then
+    AnimeInfo = data
+    init_bangumi_timer()
+  elseif action == "select-match" then
+    notify "匹配结果不唯一，请手动选择"
+    MatchResults = data["matches"]
+  elseif action == "search-results" then
+    select_anime(data)
+  elseif action == "anime-episodes" then
+    select_episode(data)
+  end
 end)
