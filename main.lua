@@ -18,7 +18,6 @@ Delay = 0
 EpisodeInfo = nil
 AnimeInfo = nil
 UpdateEpisodeTimer = nil
-BangumiSucessFlag = 0
 MatchResults = nil
 InputID = nil  -- fix race condition for mp.input, need https://github.com/mpv-player/mpv/pull/17256
 SourceStatus = nil
@@ -31,7 +30,6 @@ local function reset_globals()
     UpdateEpisodeTimer:kill()
     UpdateEpisodeTimer = nil
   end
-  BangumiSucessFlag = 0
   MatchResults = nil
   input.terminate(InputID)
   InputID = nil
@@ -263,7 +261,7 @@ local select_episode = function(data)
   for i, item in ipairs(data) do
     episode_items[i] = item.title
   end
-  input.select {
+  InputID = input.select {
     prompt = "请选择正确剧集：",
     items = episode_items,
     submit = function(idx)

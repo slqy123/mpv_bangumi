@@ -325,8 +325,8 @@ async def match_video(ctx: 'MPVBangumi', video: Path, force_id: int | None = Non
         if episode_info is None:
             logger.error("Failed to find the given episode info")
             return
-        logger.info("Using forced episode ID: %s for video %s", force_id, video.name)
-        logger.info("ForceID episode info: %s", episode_info)
+        logger.debug("Using forced episode ID: %s for video %s", force_id, video.name)
+        logger.debug("ForceID episode info: %s", episode_info)
         db.set_dandanplay_id(str(video), episode_info.episodeId)
         db.set_episode_info(episode_info.episodeId, episode_info)
     elif res is not None and res.dandanplay_id is not None:
@@ -365,7 +365,6 @@ async def match_video(ctx: 'MPVBangumi', video: Path, force_id: int | None = Non
         db.set_episode_info(episode_info.episodeId, episode_info)
 
     logger.debug("Episode info: %s", episode_info)
-    db.conn.commit()
 
     ctx.resp_message(
         "match",
@@ -530,7 +529,7 @@ async def dandanplay_get_episodes(ctx: "MPVBangumi", anime_id: int):
                 writer(json.dumps(await api.get_anime_info(anime_id)))
 
     episodes = json.loads(info_path.read_text(encoding="utf-8"))["episodes"]
-    ctx.send_action(
+    ctx.resp_message(
         "anime-episodes",
         [
             {"id": episode["episodeId"], "title": episode["episodeTitle"]}

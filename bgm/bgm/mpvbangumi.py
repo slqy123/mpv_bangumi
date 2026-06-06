@@ -3,6 +3,7 @@ from typing import Any, Awaitable
 import logging
 from bgm import logger, NOTIFY_LEVEL_NUM
 from bgm.danmaku import convert_dandanplay_json2danmaku_events, get_style_config
+from bgm.db import EpisodeMatch
 from bgm.niconico import niconico_fetch_danmaku
 from bgm.source import get_sources, set_source_status
 from bgm.utils import AsyncWorker
@@ -139,12 +140,11 @@ class MPVBangumi:
             )
         elif action == "search":
             self.add_task(dandanplay_search(self, data["keyword"]))
-
         elif action == "get-episodes":
-            self.add_task(dandanplay_get_episodes(self, data["anime_id"]))
+            self.add_task(dandanplay_get_episodes(self, int(data["anime_id"])))
         elif action == "set-source-status":
             self.add_task(
                 set_source_status(
-                    self, episode_info=data["episode_info"], status=data["status"]
+                    self, episode_info=EpisodeMatch(**data["episode_info"]), status=data["status"]
                 )
             )

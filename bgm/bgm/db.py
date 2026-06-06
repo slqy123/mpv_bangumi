@@ -41,7 +41,8 @@ class DB:
         self.db_path = DATA_PATH / "data.db"
         self.metadata_path = DATA_PATH / "metadata"
         self.metadata_path.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        self.conn = sqlite3.connect(self.db_path, check_same_thread=False, autocommit=True)
+        self.conn.execute("PRAGMA journal_mode=WAL;")
         self.cursor = self.conn.cursor()
         self.create_table()
 

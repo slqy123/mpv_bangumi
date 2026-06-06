@@ -76,6 +76,7 @@ if not config_file.exists():
     logger.warning(f"Config file {config_file} does not exist.")
     init_config()
     assert config_file.exists()
+    exit(0)
 
 # Load environment variables from .env file
 if env_file.exists():
