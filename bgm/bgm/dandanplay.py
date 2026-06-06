@@ -451,7 +451,7 @@ async def dandanplay_login_or_update():
     username = os.getenv("DANDANPLAY_USERNAME")
     password = os.getenv("DANDANPLAY_PASSWORD")
     if not username or not password:
-        logger.error("Username or password not found in config.")
+        logger.debug("Username or password not found in config.")
         return
     async with DanDanAPI() as api:
         j = await api.login(username, password)

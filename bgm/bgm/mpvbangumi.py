@@ -59,6 +59,9 @@ class MPVBangumi:
         self.worker.stop()
         logger.removeHandler(self.mpv_log_handler)
 
+    def clear_comments(self):
+        self.__comments = {}
+
     def update_comments(self, source: str, comments: list[dict]):
         """comments in dandanplay style"""
         self.__comments[source] = comments
@@ -98,6 +101,7 @@ class MPVBangumi:
                 match_video(self, Path(data["path"]), force_id=data.get("force_id"))
             )
         elif action == "sources":
+            self.clear_comments()
             self.add_task(get_sources(self, data["episode_info"]))
         elif action == "fetch-danmaku":
             source = data["source"]
