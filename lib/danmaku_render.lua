@@ -1,13 +1,27 @@
 local utils = require "lib.utils"
+
+local function filter_state(label, name)
+  local filters = mp.get_property_native("vf")
+  for _, filter in pairs(filters) do
+    if filter.label == label or filter.name == name
+        or (name and filter.params[name] ~= nil) then
+      return true
+    end
+  end
+  return false
+end
+
 local M = {
-  INTERVAL = 0.01, -- 默认调整为约 60fps 渲染频率，避免跑满单核
   visible = true,
-  paused = false,
+  paused = true,
   osd_width = 0,
   osd_height = 0,
   _initialized = false,
-  timer = nil,
-  comments = {}, -- 存储传入的 events 数组
+  _last_pos = -1,
+  _last_index = 1,
+  _max_duration = 5,
+  _observer_active = false,
+  comments = {},
   style = {
     fontname = "sans-serif",
     fontsize = 36,
@@ -15,7 +29,11 @@ local M = {
     bold = true,
     displayarea = 0.5,
     outline = 1.0,
-    transparency = 48, -- 对应 JSON 中的 10 进制整型
+    transparency = 48,
+    scrolltime = 15,
+    fixtime = 8,
+    vf_fps = true,
+    fps = 60,
   },
 }
 
@@ -24,27 +42,60 @@ function M:toggle_visibility(visible)
     visible = not self.visible
   end
   self.visible = visible
-  if not self.timer or not self.overlay then
+  if not self.overlay_low then
     return
   end
   if visible then
     self:render()
     if not self.paused then
-      self.timer:resume()
+      self:_start_time_observer()
     end
   else
-    self.timer:kill()
-    self.overlay.data = ""
-    self.overlay:remove()
+    self:_stop_time_observer()
+    self.overlay_low:remove()
+    self.overlay_high:remove()
+    if filter_state("danmaku") then
+      mp.commandv("vf", "remove", "@danmaku")
+    end
   end
+end
+
+function M:_ensure_vf_filter()
+  if not self.style.vf_fps then return end
+  local display_fps = mp.get_property_number("display-fps")
+  local video_fps = mp.get_property_number("estimated-vf-fps")
+  mp.msg.info(display_fps, video_fps)
+  if (display_fps and display_fps < 58) or (video_fps and video_fps > 58) then return end
+  if not filter_state("danmaku", "fps") then
+    mp.commandv("vf", "append", string.format("@danmaku:fps=fps=%s", self.style.fps))
+  end
+end
+
+local function binary_search(comments, target, getter, lo, hi)
+  lo = lo or 1
+  hi = hi or #comments
+  while lo <= hi do
+    local mid = math.floor((lo + hi) / 2)
+    local val = getter(comments[mid])
+    if val < target then
+      lo = mid + 1
+    else
+      hi = mid - 1
+    end
+  end
+  return lo
 end
 
 function M:render()
   if not self.comments or #self.comments == 0 then
     -- 如果弹幕被清空，隐式清空 OSD 渲染内容
-    if self.overlay and self.overlay.data ~= "" then
-      self.overlay.data = ""
-      self.overlay:update()
+    if self.overlay_low and self.overlay_low.data ~= "" then
+      self.overlay_low.data = ""
+      self.overlay_low:update()
+    end
+    if self.overlay_high and self.overlay_high.data ~= "" then
+      self.overlay_high.data = ""
+      self.overlay_high:update()
     end
     return
   end
@@ -65,7 +116,8 @@ function M:render()
   end
 
   local displayarea = height * style.displayarea
-  local ass_events = {}
+  local ass_events_low = {}
+  local ass_events_high = {}
   local alpha_hex = string.format("%02X", style.transparency)
   local bold_str = style.bold and "1" or "0"
 
@@ -75,7 +127,19 @@ function M:render()
     style.fontname, fontsize, alpha_hex, style.outline, style.shadow, bold_str
   )
 
-  for _, event in ipairs(self.comments) do
+  local window_start = pos - self._max_duration
+  local search_lo = 1
+  if pos >= self._last_pos and self._last_pos >= 0 then
+    search_lo = self._last_index
+  end
+
+  local lo = binary_search(self.comments, window_start, function(item) return item.start_time end, search_lo,
+    #self.comments)
+
+  for i = lo, #self.comments do
+    local event = self.comments[i]
+    if not event then break end
+    if event.start_time > pos then break end
     if pos >= event.start_time and pos <= event.end_time then
       local ass_text = nil
 
@@ -108,45 +172,63 @@ function M:render()
       end
 
       if ass_text then
-        table.insert(ass_events, ass_text)
+        if event.layer == nil or tonumber(event.layer) == 0 then
+          table.insert(ass_events_low, ass_text)
+        else
+          table.insert(ass_events_high, ass_text)
+        end
       end
     end
   end
 
-  self.overlay.res_x = width
-  self.overlay.res_y = height
-  self.overlay.data = table.concat(ass_events, "\n")
-  self.overlay:update()
+  self._last_pos = pos
+  self._last_index = lo
+
+  self.overlay_low.res_x = width
+  self.overlay_low.res_y = height
+  self.overlay_low.z = 0
+  self.overlay_low.data = table.concat(ass_events_low, "\n")
+  self.overlay_low:update()
+
+  self.overlay_high.res_x = width
+  self.overlay_high.res_y = height
+  self.overlay_high.z = 1
+  self.overlay_high.data = table.concat(ass_events_high, "\n")
+  self.overlay_high:update()
 end
 
-function M:restart_timer()
-  if self.timer then
-    self.timer:kill()
+function M:_start_time_observer()
+  if not self._observer_active then
+    self:_ensure_vf_filter()
+    mp.observe_property("time-pos", "number", self._time_pos_callback)
+    self._observer_active = true
   end
-  self.timer = mp.add_periodic_timer(self.INTERVAL, function()
-    self:render()
-  end, true)
 end
 
-function M:setup2(events, style)
-  mp.msg.info("just test")
+function M:_stop_time_observer()
+  if self._observer_active then
+    mp.unobserve_property(self._time_pos_callback)
+    self._observer_active = false
+  end
 end
 
 function M:setup(events, style)
   if events then
     self.comments = events
+    self._max_duration = math.max(style.scrolltime, style.fixtime)
+    self._last_pos = -1
+    self._last_index = 1
   end
   if style then
     utils.table_merge(self.style, style)
   end
 
   if self._initialized then
-    if self.visible and not self.paused then
-      self:render()
+    if self.visible then
+      self:_start_time_observer()
     end
     return self
   end
-
   mp.observe_property("osd-width", "number", function(_, value)
     self.osd_width = value or self.osd_width
   end)
@@ -154,35 +236,36 @@ function M:setup(events, style)
     self.osd_height = value or self.osd_height
   end)
 
-  mp.observe_property("display-fps", "number", function(_, value)
-    if not value or value <= 0 then return end
-    local interval = 1 / value
-    if interval < 0.005 then interval = 0.005 end
-    if math.abs(self.INTERVAL - interval) > 0.002 then
-      self.INTERVAL = interval
-      if self.timer and not self.paused and self.visible then
-        self:restart_timer()
-      end
+  self._time_pos_callback = function(_, time_pos)
+    if time_pos then
+      self:render()
+    else
+      if self.overlay_low then self.overlay_low:remove() end
+      if self.overlay_high then self.overlay_high:remove() end
     end
-  end)
+  end
 
   mp.observe_property("pause", "bool", function(_, pause)
     self.paused = pause
-    if not self.timer then return end
     if pause then
-      self.timer:kill()
+      self:_stop_time_observer()
     else
-      if self.visible then self.timer:resume() end
+      if self.visible then self:_start_time_observer() end
     end
   end)
 
-  self.overlay = mp.create_osd_overlay "ass-events"
+  self.overlay_low = mp.create_osd_overlay "ass-events"
+  self.overlay_high = mp.create_osd_overlay "ass-events"
 
   mp.add_hook("on_unload", 50, function()
     self.comments = {}
+    self:_stop_time_observer()
+    self:render()
+    if filter_state("danmaku") then
+      mp.commandv("vf", "remove", "@danmaku")
+    end
   end)
 
-  self:restart_timer()
   self._initialized = true
   return self
 end

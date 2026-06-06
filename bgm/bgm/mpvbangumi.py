@@ -6,7 +6,7 @@ from bgm.danmaku import convert_dandanplay_json2danmaku_events, get_style_config
 from bgm.niconico import niconico_fetch_danmaku
 from bgm.source import get_sources
 from bgm.utils import AsyncWorker
-from bgm.dandanplay import match_video
+from bgm.dandanplay import dandanplay_login_or_update, match_video, dandanplay_comment
 from bgm.dandanplay import fetch_danmaku as dandanplay_fetch_danmaku
 from bgm.bangumi import (
     bangumi_fetch_episodes,
@@ -58,9 +58,10 @@ class MPVBangumi:
         self.worker.stop()
         logger.removeHandler(self.mpv_log_handler)
 
-    def update_comments(self, source: str, comments: Any):
+    def update_comments(self, source: str, comments: list[dict]):
         """comments in dandanplay style"""
         self.__comments[source] = comments
+        logger.info(f"source {source}: {len(comments)} danmakus")
 
         events = convert_dandanplay_json2danmaku_events(
             list(chain(*self.__comments.values()))
@@ -92,7 +93,6 @@ class MPVBangumi:
             data = json.loads(data)
 
         if action == "match":
-            logger.info("match get")
             self.add_task(
                 match_video(self, Path(data["path"]), force_id=data.get("force_id"))
             )
@@ -104,6 +104,7 @@ class MPVBangumi:
                 self.add_task(
                     dandanplay_fetch_danmaku(self, data["episode_info"].episodeId)
                 )
+                self.add_task(dandanplay_login_or_update())
             elif source == "niconico":
                 self.add_task(
                         niconico_fetch_danmaku(
@@ -125,4 +126,14 @@ class MPVBangumi:
             import webbrowser
 
             webbrowser.open(f"https://bgm.tv/subject/{int(data['bgm_id'])}")
-            
+        elif action == "comment":
+            self.add_task(
+                dandanplay_comment(
+                    self,
+                    comment=data["comment"],
+                    episode_id=data["episode_id"],
+                    color=int(data["color"]),
+                    position=int(data["position"]),
+                    time=float(data["time"]),
+                )
+            )

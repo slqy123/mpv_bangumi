@@ -29,23 +29,22 @@ from bgm.api import API
 if TYPE_CHECKING:
     from bgm.mpvbangumi import MPVBangumi
 
-CONFIG = json.loads(os.environ.get("MPV_DANMAKU_CONFIG", "{}"))
-logger.debug("CONFIG: %s", CONFIG)
-
-
 DB_PATH = DATA_PATH / "data.db"
 
 AUTHENTICATION_TOKEN_PATH = DATA_PATH / "authentication_token.json"
 AUTHENTICATION_TOKEN: str | None = None
 AUTHENTICATION_TOKEN_TIMESTAMP: int | None = None
-if AUTHENTICATION_TOKEN_PATH.exists():
-    with open(AUTHENTICATION_TOKEN_PATH, "r") as f:
-        try:
-            _ = json.loads(f.read())
-            AUTHENTICATION_TOKEN = _["token"]
-            AUTHENTICATION_TOKEN_TIMESTAMP = _["timestamp"]
-        except json.JSONDecodeError:
-            logger.error("Failed to load authentication token from file.")
+
+def load_authentication_token():
+    global AUTHENTICATION_TOKEN, AUTHENTICATION_TOKEN_TIMESTAMP
+    if AUTHENTICATION_TOKEN_PATH.exists():
+        with open(AUTHENTICATION_TOKEN_PATH, "r") as f:
+            try:
+                _ = json.loads(f.read())
+                AUTHENTICATION_TOKEN = _["token"]
+                AUTHENTICATION_TOKEN_TIMESTAMP = _["timestamp"]
+            except json.JSONDecodeError:
+                logger.error("Failed to load authentication token from file.")
 
 
 # video utils >>> -------------------------------------------------------------
@@ -102,18 +101,15 @@ def get_info(video_path: Path):
 # api >>> ---------------------------------------------------------------------
 
 class DanDanAPI(API):
-    # 映射到基类要求的属性名
     API_BASE = "https://api.dandanplay.net/api/v2/"
 
     def __init__(self) -> None:
-        # 1. 先初始化基类
         super().__init__()
         
-        # 2. 初始化子类特有属性
         self.appid = os.environ["DANDANPLAY_APPID"]
         self.secret = os.environ["DANDANPLAY_APPSECRET"]
-        
-        # 3. 弹弹战机常规的鉴权 Header
+
+        load_authentication_token()
         self.has_auth = bool(AUTHENTICATION_TOKEN)
         self.auth_header = (
             {"Authorization": f"Bearer {AUTHENTICATION_TOKEN}"}
@@ -127,18 +123,15 @@ class DanDanAPI(API):
 
     def generate_login_signature(self, username, password, timestamp):
         data = f"{self.appid}{password}{timestamp}{username}{self.secret}"
-        logger.info(data)
         sig = hashlib.md5(data.encode()).hexdigest()
-        logger.info(f"login sig: {sig}")
+        logger.debug(f"payload: {data}, login sig: {sig}")
         return sig
 
     async def post(self, uri: str, data: dict | None = None, timestamp: int | None = None) -> Any:
-        # 计算签名所需的参数
         timestamp = int(time.time()) if timestamp is None else timestamp
         path = "/api/v2/" + uri
         sig = self.generate_signature(timestamp, path)
         
-        # 构建本次请求独有的动态 headers
         dynamic_headers = {
             "Accept": "application/json",
             "X-AppId": self.appid,
@@ -376,7 +369,7 @@ async def match_video(ctx: 'MPVBangumi', video: Path, force_id: int | None = Non
         db.set_dandanplay_id(str(video), episode_info.episodeId)
         db.set_episode_info(episode_info.episodeId, episode_info)
 
-    logger.info("Episode info: %s", episode_info)
+    logger.debug("Episode info: %s", episode_info)
     db.conn.commit()
 
     ctx.resp_message(
@@ -479,53 +472,52 @@ async def get_bgm_id(video: Path, anime_id: int):
     #     )
     # )
 
-# @main.command("login-or-update")
-# def login_or_update():
-#     if AUTHENTICATION_TOKEN and AUTHENTICATION_TOKEN_TIMESTAMP:
-#         delta = int(time.time()) - AUTHENTICATION_TOKEN_TIMESTAMP
-#         if delta < 3600 * 24 * 7:
-#             logger.info("Authentication token is still valid, skip login.")
-#             exit(-1)
-#         if delta < 3600 * 24 * 21:
-#             logger.info("Try renew authentication token.")
-#             api = DanDanAPI()
-#             j = api.run(api.renew_token())[0]
-#             if j.get("token"):
-#                 logger.info("Renew authentication token successful.")
-#                 with open(AUTHENTICATION_TOKEN_PATH, "w") as f:
-#                     f.write(
-#                         json.dumps(
-#                             {
-#                                 "token": j["token"],
-#                                 "timestamp": j["timestamp"],
-#                             }
-#                         )
-#                     )
-#             exit(-1)
-#         logger.info("Authentication token expired, try login.")
+async def dandanplay_login_or_update():
+    if AUTHENTICATION_TOKEN and AUTHENTICATION_TOKEN_TIMESTAMP:
+        delta = int(time.time()) - AUTHENTICATION_TOKEN_TIMESTAMP
+        if delta < 3600 * 24 * 7:
+            logger.debug("Authentication token is still valid, skip login.")
+            return
+        if delta < 3600 * 24 * 21:
+            logger.debug("Try renew authentication token.")
+            async with DanDanAPI() as api:
+                j = await api.renew_token()
+            if j.get("token"):
+                logger.debug("Renew authentication token successful.")
+                with open(AUTHENTICATION_TOKEN_PATH, "w") as f:
+                    f.write(
+                        json.dumps(
+                            {
+                                "token": j["token"],
+                                "timestamp": j["timestamp"],
+                            }
+                        )
+                    )
+                return
+        logger.info("Authentication token expired, try login.")
 
-#     username = CONFIG.get("userName")
-#     password = CONFIG.get("password")
-#     if not username or not password:
-#         logger.error("Username or password not found in config.")
-#         exit(-1)
-#     api = DanDanAPI()
-#     j = api.run(api.login(username, password))[0]
-#     if j.get("token"):
-#         logger.info("Login successful.")
-#         with open(AUTHENTICATION_TOKEN_PATH, "w") as f:
-#             f.write(
-#                 json.dumps(
-#                     {
-#                         "token": j["token"],
-#                         "timestamp": int(time.time()),
-#                     }
-#                 )
-#             )
-#             exit()
-#     else:
-#         logger.error("Login failed, %s", j.get("errorMessage"))
-#         exit(-1)
+    username = os.getenv("DANDANPLAY_USERNAME")
+    password = os.getenv("DANDANPLAY_PASSWORD")
+    if not username or not password:
+        logger.error("Username or password not found in config.")
+        return
+    async with DanDanAPI() as api:
+        j = await api.login(username, password)
+        if j.get("token"):
+            logger.debug("Login successful.")
+            with open(AUTHENTICATION_TOKEN_PATH, "w") as f:
+                f.write(
+                    json.dumps(
+                        {
+                            "token": j["token"],
+                            "timestamp": int(time.time()),
+                        }
+                    )
+                )
+                return
+        else:
+            logger.error("Login failed, %s", j.get("errorMessage"))
+            return
 
 
 # @main.command()
@@ -565,6 +557,44 @@ async def get_bgm_id(video: Path, anime_id: int):
 #     convert_dandanplay_json2ass(comment_path, ass_path)
 #     assert ass_path.exists()
 #     click.echo(json.dumps(dict(path=str(ass_path)), ensure_ascii=False))
+async def dandanplay_comment(
+    ctx: "MPVBangumi",
+    comment: str,
+    episode_id: int,
+    color: int = 0xFFFFFF,
+    position: int = 1,
+    time: float = 0.0,
+):
+    async with DanDanAPI() as api:
+        if not api.has_auth:
+            logger.error("No authentication token found, please login first.")
+            return
+        success = (
+            await api.comment(
+                comment=comment,
+                episode_id=episode_id,
+                color=color,
+                position=position,
+                time=time,
+            )
+        ).get("success")
+
+        if not success:
+            logger.error("Failed to send comment.")
+            return
+
+        logger.notify("弹幕发送成功")
+        db.append_user_comment(
+            comment=comment,
+            episode_id=episode_id,
+            color=color,
+            position=position,
+            time=time,
+        )
+        comment_path = db.get_path(episode_id, "comment")
+        ctx.update_comments(
+            "main", json.loads(comment_path.read_text(encoding="utf-8"))["comments"]
+        )
 
 
 # @main.command("update-metadata")

@@ -107,30 +107,6 @@ local function init_bangumi_timer()
     end
   end)
 end
-local function init_after_bangumi_id()
-  bgm.update_bangumi_collection().async {
-    resp = function(resp)
-      if resp.update_message then
-        mp.osd_message(resp.update_message, 3)
-      else
-        mp.msg.verbose "Collection status unchanged"
-      end
-      BangumiSucessFlag = BangumiSucessFlag + 1
-    end,
-    err = function(err)
-      mp.msg.error("更新Bangumi条目失败:", err)
-    end,
-  }
-  bgm.fetch_episodes().async {
-    resp = function(_)
-      mp.msg.verbose "Fetch episodes success"
-      BangumiSucessFlag = BangumiSucessFlag + 1
-    end,
-    err = function(err)
-      mp.msg.error("获取剧集信息失败:", err)
-    end,
-  }
-end
 
 local function init(episode_id)
   reset_globals()
@@ -140,31 +116,6 @@ local function init(episode_id)
     init_bgm()
   end
 
-  -- bgm.match(episode_id)
-  -- bgm.match(episode_id).async {
-  --   resp = function(data)
-  --     if not data then
-  --       mp.msg.error "获取弹幕失败"
-  --       return
-  --     end
-  --     if data.error then
-  --       if data.error == "VideoPathError" then
-  --         mp.msg.verbose(
-  --           "Skip video "
-  --             .. data.video
-  --             .. " not in the storage path "
-  --             .. data.storage
-  --         )
-  --         return
-  --       end
-  --     end
-  --     if data.matches ~= nil then
-  --       mp.msg.info "匹配结果不唯一，请手动选择"
-  --       mp.osd_message("匹配结果不唯一，请手动选择", 3)
-  --       MatchResults = data.matches
-  --       return
-  --     end
-  --     EpisodeInfo = data.info
   --     mp.msg.verbose("弹幕路径:", data.path)
   --     mp.osd_message(
   --       string.format(
@@ -250,25 +201,6 @@ end
 -- script messages
 
 mp.register_script_message("send-danmaku", function(comment)
-  local function send_danmaku()
-    bgm.send_danmaku(EpisodeInfo.episodeId, comment).async {
-      resp = function(data)
-        if not data or not data.path then
-          mp.msg.error "发送弹幕功能暂不支持"
-          mp.osd_message("发送弹幕功能暂不支持", 3)
-          return
-        end
-        mp.msg.verbose "弹幕发送成功"
-        mp.osd_message("弹幕发送成功", 3)
-        require("lib.danmaku_render"):parse_danmaku(data.path)
-      end,
-      err = function(err)
-        mp.msg.error("发送弹幕失败:", err)
-        mp.osd_message("发送弹幕失败", 3)
-      end,
-    }
-  end
-
   if not EpisodeInfo or not EpisodeInfo.episodeId then
     mp.msg.error "未匹配到视频信息"
     return
@@ -282,11 +214,11 @@ mp.register_script_message("send-danmaku", function(comment)
         input.terminate(InputID)
         mp.set_property("pause", "no")
         comment = text
-        send_danmaku()
+        bgm.send_danmaku(EpisodeInfo.episodeId, comment)
       end,
     }
   else
-    send_danmaku()
+    bgm.send_danmaku(EpisodeInfo.episodeId, comment)
   end
 end)
 
@@ -569,5 +501,8 @@ mp.register_script_message("mpvbangumi-action", function(_args)
   elseif action == "set-bangumi-id" then
     AnimeInfo = data
     init_bangumi_timer()
+  elseif action == "select-match" then
+    notify "匹配结果不唯一，请手动选择"
+    MatchResults = data["matches"]
   end
 end)

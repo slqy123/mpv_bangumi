@@ -14,6 +14,7 @@ class DanmakuConfig(BaseModel):
     danmaku_factory_path: str = "DanmakuFactory"
     danmaku_engine: Literal["DanmakuFactory", "dmconvert"] = "dmconvert"
     scrolltime: int = 15
+    fixtime: int = 8
     fontname: str = "sans-serif"
     fontsize: int = 36
     font_size_strict: bool = False

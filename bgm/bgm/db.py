@@ -142,7 +142,10 @@ class DB:
             }
         )
         comments["count"] += 1
-        with open(comment_path, "w", encoding="utf-8") as f:
+
+        with portalocker.Lock(
+            comment_path, mode="w", flags=portalocker.LockFlags.EXCLUSIVE
+        ) as f:
             json.dump(comments, f, ensure_ascii=False)
 
     @staticmethod

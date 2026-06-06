@@ -16,8 +16,13 @@ def exception_hook(args):
     exit(0)
 threading.excepthook = exception_hook
 
+if LOG_LEVEL > logging.DEBUG:
+    import os
 
-mpv = MPV(start_mpv=False, ipc_socket=sys.argv[1])
+    sys.stderr = open(os.devnull, "w")
+
+
+mpv = MPV(start_mpv=False, ipc_socket=sys.argv[1], quit_callback=lambda *_: exit(0))
 bgm = MPVBangumi(mpv)
 
 

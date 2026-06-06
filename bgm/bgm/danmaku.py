@@ -275,7 +275,7 @@ def convert_dandanplay_json2danmaku_events(
         resolution_x=resolution[0],
         resolution_y=resolution[1],
         roll_time=config.danmaku.scrolltime,
-        fix_time=5,
+        fix_time=config.danmaku.fixtime,
     )
 
 
@@ -372,4 +372,6 @@ def get_style_config():
         displayarea=config.danmaku.displayarea,
         outline=config.danmaku.outline,
         transparency=config.danmaku.transparency,
+        scrolltime=config.danmaku.scrolltime,
+        fixtime=config.danmaku.fixtime,
     )

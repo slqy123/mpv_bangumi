@@ -75,20 +75,12 @@ function M.send_danmaku(episode_id, comment)
   end
 
   local time_pos = mp.get_property_number "time-pos" - Delay
-  return utils.subprocess_wrapper {
-    Options.bgm_path,
-    "dandanplay",
-    "comment",
-    comment,
-    "--episode-id",
-    tostring(episode_id),
-    "--color",
-    tostring(color),
-    "--position",
-    tostring(position),
-    "--time",
-    tostring(time_pos),
-  }
+  M.send_action("comment", {
+    episode_id = episode_id,
+    color = color,
+    position = position,
+    time = time_pos
+  })
 end
 
 function M.update_metadata()
