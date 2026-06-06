@@ -11,7 +11,6 @@ import time
 from typing import TYPE_CHECKING, Any, List, Literal, NoReturn
 
 import aiohttp
-import click
 from pymediainfo import MediaInfo
 
 from bgm import DATA_PATH
@@ -238,9 +237,6 @@ class DanDanAPI(API):
 # cli >>> ---------------------------------------------------------------------
 
 
-@click.group("dandanplay")
-def main(): ...
-
 
 async def get_match_info(
     video_path: Path,
@@ -422,56 +418,6 @@ async def get_bgm_id(video: Path, anime_id: int):
     logger.info("successfully update anime info: %d", bgm_id)
     return bgm_id
 
-    # comment_path_final = comment_path.with_suffix(".final.json")
-    # ass_path = comment_path.with_suffix(".ass")
-    # sources = get_source_status(anime_id=episode_id // 10000)
-    # comments = []
-    # additional_desc = []
-    # logger.debug("sources: %s", sources)
-    # for source, options in sources.items():
-    #     if source == "main" and options.get("enabled"):
-    #         comments.extend(json.loads(comment_path.read_text())["comments"])
-    #         continue
-    #     if options.get("enabled"):
-    #         assert source == "niconico"
-    #         source_comments_desc = get_source_danmaku(episode_id, source)
-    #         if source_comments_desc is None:
-    #             logger.error("Failed to get danmaku from source: %s", source)
-    #         else:
-    #             comments.extend(source_comments_desc[0])
-    #             additional_desc.append(f"[{source}]：{source_comments_desc[1]}")
-    # if len(comments) == 0:
-    #     convert_dandanplay_json2ass(comment_path, ass_path)
-    # else:
-    #     with comment_path_final.open("w", encoding="utf-8") as f:
-    #         f.write(
-    #             json.dumps(
-    #                 {
-    #                     "count": len(comments),
-    #                     "comments": comments,
-    #                 }
-    #             )
-    #         )
-    #     convert_dandanplay_json2ass(comment_path_final, ass_path)
-
-    # logger.info("Danmaku fetched successfully.")
-    # click.echo(
-    #     json.dumps(
-    #         {
-    #             "path": str(ass_path),
-    #             "style": get_style_config(),
-    #             "info": episode_info.model_dump(),
-    #             "desc": episode_info.animeTitle
-    #             + " "
-    #             + episode_info.episodeTitle,
-    #             "desc_extra": "\n".join(additional_desc) if len(additional_desc) else "",
-    #             "count": json.loads(comment_path.read_text(encoding="utf-8"))["count"],
-    #             "sources": sources,
-    #         },
-    #         ensure_ascii=False,
-    #     )
-    # )
-
 async def dandanplay_login_or_update():
     if AUTHENTICATION_TOKEN and AUTHENTICATION_TOKEN_TIMESTAMP:
         delta = int(time.time()) - AUTHENTICATION_TOKEN_TIMESTAMP
@@ -519,44 +465,6 @@ async def dandanplay_login_or_update():
             logger.error("Login failed, %s", j.get("errorMessage"))
             return
 
-
-# @main.command()
-# @click.argument("comment", type=str)
-# @click.option("--episode-id", type=int, required=True)
-# @click.option("--color", type=int, default=0xFFFFFF)
-# @click.option("--position", type=int, default=1)
-# @click.option("--time", type=float, default=0.0)
-# def comment(comment: str, episode_id: int, color: int, position: int, time: float):
-#     api = DanDanAPI()
-#     if not api.has_auth:
-#         logger.error("No authentication token found, please login first.")
-#         click.echo(json.dumps(dict(path=None, error=True), ensure_ascii=False))
-#         return
-#     success = api.run(
-#         api.comment(
-#             comment=comment,
-#             episode_id=episode_id,
-#             color=color,
-#             position=position,
-#             time=time,
-#         )
-#     )[0].get("success")
-#     if not success:
-#         logger.error("Failed to send comment.")
-#         exit(-1)
-#     logger.info("Comment sent successfully.")
-#     db.append_user_comment(
-#         comment=comment,
-#         episode_id=episode_id,
-#         color=color,
-#         position=position,
-#         time=time,
-#     )
-#     comment_path = db.get_path(episode_id, "comment")
-#     ass_path = db.get_path(episode_id, "ass")
-#     convert_dandanplay_json2ass(comment_path, ass_path)
-#     assert ass_path.exists()
-#     click.echo(json.dumps(dict(path=str(ass_path)), ensure_ascii=False))
 async def dandanplay_comment(
     ctx: "MPVBangumi",
     comment: str,
@@ -597,77 +505,37 @@ async def dandanplay_comment(
         )
 
 
-# @main.command("update-metadata")
-# @click.pass_context
-# @click.argument("video", type=click.Path(exists=True, dir_okay=False, path_type=Path))
-# def update_metadata(ctx: click.Context, video: Path):
-#     api = DanDanAPI()
-#     ids = db.get(path=str(video))
-#     if ids is None or ids.dandanplay_id is None:
-#         with contextlib.redirect_stdout(None):
-#             ...
-#             # ctx.forward(fetch)
-#         ids = db.get(path=str(video))
-#     assert ids and ids.dandanplay_id
-
-#     info_path = db.get_path(ids.dandanplay_id, "info")
-
-#     if db.is_outdated(info_path, 3600 * 24):
-#         info = api.run(api.get_anime_info(ids.dandanplay_id // 10000))[0]
-#         with info_path.open("w", encoding="utf-8") as f:
-#             f.write(json.dumps(info, ensure_ascii=False))
-#     else:
-#         logger.info("anime info not outdated, skip requesting info")
-#         info = json.loads(info_path.read_text(encoding="utf-8"))
-
-#     bgm_id = int(info["bangumiUrl"].rsplit("/", 1)[1])
-#     db.set_bgm_id(str(video), bgm_id)
-#     logger.info("successfully update anime info")
-#     click.echo(
-#         json.dumps({"bgm_id": bgm_id, "bgm_url": f"https://bgm.tv/subject/{bgm_id}"})
-#     )
+async def dandanplay_search(ctx: "MPVBangumi", keyword: str):
+    """Search for anime by keyword."""
+    async with DanDanAPI() as api:
+        results = await api.search_anime(keyword)
+    ctx.resp_message(
+        "search-results",
+        [
+            {
+                "id": result["animeId"],
+                "title": result["animeTitle"],
+                "type": result["type"],
+            }
+            for result in results
+        ],
+    )
 
 
-# @main.command("search")
-# @click.argument("keyword", type=str)
-# def search(keyword: str):
-#     """Search for anime by keyword."""
-#     api = DanDanAPI()
-#     results = api.run(api.search_anime(keyword))[0]
-#     click.echo(
-#         json.dumps(
-#             [
-#                 {
-#                     "id": result["animeId"],
-#                     "title": result["animeTitle"],
-#                     "type": result["type"],
-#                 }
-#                 for result in results
-#             ],
-#             ensure_ascii=False,
-#         )
-#     )
+async def dandanplay_get_episodes(ctx: "MPVBangumi", anime_id: int):
+    """Get episodes of an anime by its ID."""
+    info_path = db.get_path(anime_id * 10000, "info")
+    async with db.check_update_async(info_path) as writer:
+        if writer:
+            async with DanDanAPI() as api:
+                writer(json.dumps(await api.get_anime_info(anime_id)))
 
+    episodes = json.loads(info_path.read_text(encoding="utf-8"))["episodes"]
+    ctx.send_action(
+        "anime-episodes",
+        [
+            {"id": episode["episodeId"], "title": episode["episodeTitle"]}
+            for episode in episodes
+        ],
+    )
 
-# @main.command("get-episodes")
-# @click.argument("anime_id", type=int)
-# def get_episodes(anime_id: int):
-#     """Get episodes of an anime by its ID."""
-#     api = DanDanAPI()
-#     info = db.get_or_update(
-#         anime_id * 10000 + 1, "info", lambda: api.run(api.get_anime_info(anime_id))[0]
-#     )
-#     episodes = info["episodes"]
-#     click.echo(
-#         json.dumps(
-#             [
-#                 {"id": episode["episodeId"], "title": episode["episodeTitle"]}
-#                 for episode in episodes
-#             ],
-#             ensure_ascii=False,
-#         )
-#     )
-
-
-# if __name__ == "__main__":
-#     main()

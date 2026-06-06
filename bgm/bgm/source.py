@@ -1,10 +1,11 @@
 import asyncio
 from sqlite3.dbapi2 import Time
 from typing import Literal, Protocol, TYPE_CHECKING
-import click
 import json
 from dataclasses import dataclass
 from pathlib import Path
+
+import portalocker
 
 from bgm import DATA_PATH, logger
 from bgm.db import DB, IDS, EpisodeMatch, db
@@ -62,67 +63,17 @@ async def get_sources(ctx: "MPVBangumi", episode_info: 'EpisodeMatch') -> None:
                 ),
             },
         )
-        # comment_path = data_path / "comment.json"
-        # if not db.is_outdated(comment_path):
-        #     ctx.send_action
 
-def set_source_status(anime_id: int, status: dict):
-    from bgm.db import db
-    source_path = db.get_path(anime_id * 10000, "source")
-
-    with source_path.open("w", encoding="utf-8") as f:
+async def set_source_status(ctx: "MPVBangumi", episode_info: EpisodeMatch, status: dict):
+    source_path = db.get_path(episode_info.episodeId, "source")
+    with portalocker.Lock(
+        source_path, mode="w", flags=portalocker.LockFlags.EXCLUSIVE
+    ) as f:
         f.write(json.dumps(status))
-    
-def get_source_danmaku(episode_id: int, source: Literal["niconico"]) -> tuple[list[dict], str] | None:
-    from bgm.db import db
-    comment_path = db.get_path(episode_id, "commentEX")
 
-    if comment_path.exists():
-        sources = json.loads(comment_path.read_text())
-    else:
-        sources = {}
-
-    if (danmaku:=sources.get(source)) is not None and not db.is_outdated(comment_path):
-        return danmaku
-
-    ids = db.get(dandanplay_id=episode_id)
-    if ids is None:
-        assert False, "Dandanplay ID should not be None"
-    if ids.bgm_id is None:
-        info_path = db.get_path(episode_id, "info")
-        info = json.loads(info_path.read_text())
-        bgm_id = int(info["bangumiUrl"].rsplit("/", 1)[1])
-        ids = IDS(ids.path, bgm_id, ids.dandanplay_id)
-
-    match source:
-        case "niconico":
-            from bgm.niconico import NicoNicoSource
-            return NicoNicoSource(
-                get_source_status(episode_id // 10000)[source],
-                DanmakuSource.Context(DATA_PATH / f"metadata/{episode_id // 10000}/cache_{source}", get_or_update_bangumi_data()["items"], ids)
-            ).fetch(episode_id % 10000)
-        case _:
-            assert False
-        
+    ctx.send_action("sources", {"episode_info": episode_info})
 
 
-@click.group()
-def source():
-    pass
-
-
-# @click.argument("source", type=click.Choice(["niconico"]))
-@source.command("set-status")
-@click.argument("anime_id", type=int)
-@click.argument("options_json", type=str)
-def set_status(anime_id: int, options_json: str):
-    # sources = get_source_status(anime_id)
-    # sources[source] = json.loads(options_json)
-    sources = json.loads(options_json)
-    set_source_status(anime_id, sources)
-
-    click.echo(json.dumps({"success": True, "sources": sources}))
-    
 # --- bangumi data ---
 def get_bangumi_data():
     bangumi_data_path = DATA_PATH.joinpath("bangumi-data.json")

@@ -143,31 +143,18 @@ function M.update_episode()
 end
 
 function M.dandanplay_search(keyword)
-  return utils.subprocess_wrapper {
-    Options.bgm_path,
-    "dandanplay",
-    "search",
-    keyword,
-  }
+  M.send_action("search", { keyword = keyword })
 end
 
 function M.get_dandanplay_episodes(anime_id)
-  return utils.subprocess_wrapper {
-    Options.bgm_path,
-    "dandanplay",
-    "get-episodes",
-    tostring(anime_id),
-  }
+  M.send_action("get-episodes", { anime_id = anime_id })
 end
 
-function M.update_source_status(anime_id, source_status)
-  return utils.subprocess_wrapper {
-    Options.bgm_path,
-    "source",
-    "set-status",
-    tostring(anime_id),
-    mp_utils.format_json(source_status)
-  }
+function M.update_source_status(episode_info, source_status)
+  M.send_action("set-source-status", {
+    episode_info = episode_info,
+    status = source_status
+  })
 end
 
 return M

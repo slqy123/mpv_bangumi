@@ -64,7 +64,6 @@ function M:_ensure_vf_filter()
   if not self.style.vf_fps then return end
   local display_fps = mp.get_property_number("display-fps")
   local video_fps = mp.get_property_number("estimated-vf-fps")
-  mp.msg.info(display_fps, video_fps)
   if (display_fps and display_fps < 58) or (video_fps and video_fps > 58) then return end
   if not filter_state("danmaku", "fps") then
     mp.commandv("vf", "append", string.format("@danmaku:fps=fps=%s", self.style.fps))

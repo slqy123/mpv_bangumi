@@ -4,9 +4,9 @@ import logging
 from bgm import logger, NOTIFY_LEVEL_NUM
 from bgm.danmaku import convert_dandanplay_json2danmaku_events, get_style_config
 from bgm.niconico import niconico_fetch_danmaku
-from bgm.source import get_sources
+from bgm.source import get_sources, set_source_status
 from bgm.utils import AsyncWorker
-from bgm.dandanplay import dandanplay_login_or_update, match_video, dandanplay_comment
+from bgm.dandanplay import dandanplay_get_episodes, dandanplay_login_or_update, dandanplay_search, match_video, dandanplay_comment
 from bgm.dandanplay import fetch_danmaku as dandanplay_fetch_danmaku
 from bgm.bangumi import (
     bangumi_fetch_episodes,
@@ -135,5 +135,16 @@ class MPVBangumi:
                     color=int(data["color"]),
                     position=int(data["position"]),
                     time=float(data["time"]),
+                )
+            )
+        elif action == "search":
+            self.add_task(dandanplay_search(self, data["keyword"]))
+
+        elif action == "get-episodes":
+            self.add_task(dandanplay_get_episodes(self, data["anime_id"]))
+        elif action == "set-source-status":
+            self.add_task(
+                set_source_status(
+                    self, episode_info=data["episode_info"], status=data["status"]
                 )
             )
