@@ -36,7 +36,7 @@ AUTHENTICATION_TOKEN_TIMESTAMP: int | None = None
 def load_authentication_token():
     global AUTHENTICATION_TOKEN, AUTHENTICATION_TOKEN_TIMESTAMP
     if AUTHENTICATION_TOKEN_PATH.exists():
-        with open(AUTHENTICATION_TOKEN_PATH, "r") as f:
+        with open(AUTHENTICATION_TOKEN_PATH, "r", encoding="utf-8") as f:
             try:
                 _ = json.loads(f.read())
                 AUTHENTICATION_TOKEN = _["token"]
@@ -436,7 +436,7 @@ async def dandanplay_login_or_update():
                     return
             if j.get("token"):
                 logger.debug("Renew authentication token successful.")
-                with open(AUTHENTICATION_TOKEN_PATH, "w") as f:
+                with open(AUTHENTICATION_TOKEN_PATH, "w", encoding="utf-8") as f:
                     f.write(
                         json.dumps(
                             {

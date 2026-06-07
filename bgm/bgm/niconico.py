@@ -443,7 +443,6 @@ class NicoNicoSource(DanmakuSource):
     def __init__(self, options: dict, context: DanmakuSource.Context):
         self.context = context
         self.context.data_path.mkdir(parents=True, exist_ok=True)
-        # logger.debug("context: %s", self.context)
         self.series_info_path = self.context.data_path.joinpath("series_info.json")
         self.series: int|None = options.get("series")
         self.offset: int = options.get("offset", 0)
@@ -545,7 +544,7 @@ class NicoNicoSource(DanmakuSource):
             desc = api_data["data"]["video"]["title"]
             out_path.write_text(json.dumps({"result": result, "desc": desc}, ensure_ascii=False, indent=2), encoding='utf-8')
         else:
-            _ = json.loads(out_path.read_text())
+            _ = json.loads(out_path.read_text(encoding="utf-8"))
             result, desc = _["result"], _["desc"]
 
         return self.convert_format(result), desc

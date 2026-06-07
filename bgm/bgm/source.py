@@ -30,7 +30,7 @@ async def get_sources(ctx: "MPVBangumi", episode_info: 'EpisodeMatch') -> None:
     source_path = db.get_path(episode_info.episodeId, "source")
 
     if source_path.exists():
-        sources = json.loads(source_path.read_text())
+        sources = json.loads(source_path.read_text(encoding="utf-8"))
     else:
         sources = {"main": {"enabled": True}}
 

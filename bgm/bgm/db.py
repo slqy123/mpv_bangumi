@@ -189,8 +189,9 @@ class DB:
             yield None
             return
 
+        path.touch(exist_ok=True)
         with portalocker.Lock(
-            path, mode="a+", flags=portalocker.LockFlags.EXCLUSIVE
+            path, mode="r+b", flags=portalocker.LockFlags.EXCLUSIVE
         ) as f:
             if not self.is_outdated(path, max_age):
                 yield None
@@ -198,9 +199,8 @@ class DB:
 
             def safe_write(content: str):
                 f.seek(0)
-                f.truncate(0)
-
-                f.write(content)
+                f.write(content.encode("utf-8"))
+                f.truncate()
                 f.flush()
 
             yield safe_write
@@ -211,8 +211,9 @@ class DB:
             yield None
             return
 
+        path.touch(exist_ok=True)
         with portalocker.Lock(
-            path, mode="a+", flags=portalocker.LockFlags.EXCLUSIVE
+            path, mode="r+b", flags=portalocker.LockFlags.EXCLUSIVE
         ) as f:
             if not self.is_outdated(path, max_age):
                 yield None
@@ -220,9 +221,8 @@ class DB:
 
             def safe_write(content: str):
                 f.seek(0)
-                f.truncate(0)
-
-                f.write(content)
+                f.write(content.encode("utf-8"))
+                f.truncate()
                 f.flush()
 
             yield safe_write

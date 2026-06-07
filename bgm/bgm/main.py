@@ -6,6 +6,7 @@ from bgm import LOG_LEVEL
 import json
 import threading
 import traceback
+import portalocker
 
 
 def exception_hook(args):
@@ -21,8 +22,13 @@ if LOG_LEVEL > logging.DEBUG:
 
     sys.stderr = open(os.devnull, "w")
 
+ipc_socket = sys.argv[1]
+if sys.platform == "win32":
+    portalocker.portalocker.LOCKER = portalocker.portalocker.Win32Locker
+    assert ipc_socket.startswith("\\\\.\\pipe\\")
+    ipc_socket = ipc_socket.replace("\\\\.\\pipe\\", "", count=1)
 
-mpv = MPV(start_mpv=False, ipc_socket=sys.argv[1], quit_callback=lambda *_: exit(0))
+mpv = MPV(start_mpv=False, ipc_socket=ipc_socket, quit_callback=lambda *_: exit(0))
 bgm = MPVBangumi(mpv)
 
 

@@ -14,9 +14,6 @@
 
 ## 安装
 
-> [!NOTE]
-> 最新版本重构了项目架构，改为使用IPC进行通信。目前还有很多小问题没修，windows支持未知，等稳定下来再测试。windows用户推荐还是使用[v1](https://github.com/slqy123/mpv_bangumi/tree/v1)分支。
-
 本插件需要系统安装python环境，并手动安装依赖库。推荐python>=3.13，更低版本理论可以但未进行测试，windows用户若无python环境，在微软应用商店搜索安装最新版即可。
 
 1. 下载本插件代码至mpv脚本目录（`~/.config/mpv/scripts/`）
@@ -29,6 +26,8 @@ git clone https://github.com/slqy123/mpv_bangumi.git ~/.config/mpv/scripts/
 
 ```shell
 cd mpv_bangumi/bgm
+# 如果是微软商店安装的python，还需要在powershell中额外运行：
+# $env:PATH = "$env:PATH;$HOME\AppData\Local\microsoft\windowsapps"
 python -m venv .venv
 
 # 根据系统和shell环境选择合适的激活命令
@@ -42,6 +41,37 @@ pip install -e .
 3. 初始化配置
 
 运行`bgm`命令，将交互式生成初始配置文件。
+
+使用 `python -c "import appdirs; print(appdirs.user_config_dir('bgm'))"` 可查看配置文件夹位置。
+可以在 `config.toml` 中修改弹幕样式：
+```toml
+[danmaku]
+# 弹幕速度
+scrolltime = 15
+fixtime = 8
+# 字体
+fontname = "sans-serif"
+# 大小
+fontsize = 36
+# 阴影
+shadow = 1
+# 粗体
+bold = true
+# 弹幕显示范围
+displayarea = 0.5
+# 描边
+outline = 1.0
+# 透明度
+transparency = 0x30
+```
+`.env`中可以自定义API令牌
+```shell
+DANDANPLAY_APPID=...
+DANDANPLAY_APPSECRET=...
+BGM_ACCESS_TOKEN=...
+DANDANPLAY_USERNAME=...
+DANDANPLAY_PASSWORD=...
+```
 
 ## 使用
 - `ALT-M`: 手动匹配番剧(自动匹配未成功时使用)

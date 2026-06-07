@@ -80,7 +80,7 @@ if not config_file.exists():
 
 # Load environment variables from .env file
 if env_file.exists():
-    env_str = env_file.read_text()
+    env_str = env_file.read_text(encoding="utf-8")
     logger.debug(f"Loading environment variables from {env_file}:\n{env_str}")
     env_stream = StringIO(env_str)
 
