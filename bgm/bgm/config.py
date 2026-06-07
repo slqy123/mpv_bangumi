@@ -17,14 +17,10 @@ class DanmakuConfig(BaseModel):
     fixtime: int = 8
     fontname: str = "sans-serif"
     fontsize: int = 36
-    font_size_strict: bool = False
-    shadow: int = 1
+    shadow: int = 0
     bold: bool = True
-    density: float = 0.0
     displayarea: float = 0.5
     outline: float = 1.0
-    blockmode: str = ""
-    blacklist_path: str = ""
     transparency: int = 0x30
 
 
