@@ -1,5 +1,4 @@
 from functools import reduce
-from bgm import logger
 import re
 from pydantic import BaseModel
 import asyncio
@@ -11,7 +10,7 @@ class InfoFromFileName(BaseModel):
     episode: int | None
 
 
-def extract_info_from_filename(filename: str):
+def extract_info_from_filename(filename: str) -> InfoFromFileName:
     filename = filename.strip().rsplit(".", 1)[0]  # Remove file extension
     tags_re = re.compile(r"[\[\(（【第](.+?)[\]\)）】话話]")
     # tags_re = "|".join(

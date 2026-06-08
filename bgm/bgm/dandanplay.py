@@ -352,9 +352,10 @@ async def match_video(ctx: 'MPVBangumi', video: Path, force_id: int | None = Non
         logger.info("Autoload episode ID: %s for video %s", episode_id, video.name)
         episode_info = db.get_episode_info(episode_id)
         if episode_info is None:
-            logger.warning(f"Episode info not found for: {video.name}")
+            logger.debug(f"Episode info not found for: {video.name}")
             episode_info = await construct_episode_match(episode_id)
             if episode_info is None:
+                logger.warning("autoload: Failed to construct episode match for %d, fallback to api match", episode_id)
                 episode_info = await api_match_danmaku(ctx, video)
                 if episode_info is None:
                     return

@@ -8,6 +8,7 @@ import datetime
 from bgm import logger
 from pathlib import Path
 import portalocker
+from collections import Counter
 
 from bgm.utils import extract_info_from_filename
 
@@ -73,17 +74,28 @@ class DB:
 
     def get_autoload_source(self, dir_: str, filename: str) -> int | None:
         self.cursor.execute(
-            f"SELECT DISTINCT dandanplay_id / 10000 FROM {self.TABLE_NAME} WHERE path like ? and dandanplay_id IS NOT NULL",
+            f"SELECT path, dandanplay_id FROM {self.TABLE_NAME} WHERE path like ? and dandanplay_id IS NOT NULL",
             (dir_ + "%",),
         )
-        results = [r[0] for r in self.cursor.fetchall()]
-        if len(results) != 1:
+        results = self.cursor.fetchall()
+        filenames = [Path(r[0]).name for r in results]
+        episode_ids = [r[1] for r in results]
+        animes = set([r // 10000 for r in episode_ids])
+        if len(animes) != 1:
             return None
-        anime_id = results[0]
+        anime_id = animes.pop()
         ep = extract_info_from_filename(filename).episode
+        offset = Counter(
+            [
+                epid % 10000 - (extract_info_from_filename(name).episode or 0)
+                for epid, name in zip(episode_ids, filenames)
+            ]
+        ).most_common(1)[0][0]
+        if offset != 0:
+            logger.info("autoload: use offset %d", offset)
         if not ep:
             return None
-        return anime_id * 10000 + ep
+        return anime_id * 10000 + ep + offset
 
     def set_bgm_id(self, path: str, id_: int):
         self.cursor.execute(
