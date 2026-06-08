@@ -10,7 +10,7 @@
 - [N站](https://www.nicovideo.jp)弹幕支持
 
 其中弹幕播放功能参考[uosc_danmaku](https://github.com/Tony15246/uosc_danmaku)。
-弹幕转换的功能主要基于DanmakuFactory原作者新写的[python版本](https://github.com/timerring/DanmakuConvert)修改。
+弹幕转换的功能主要基于[dmconvert](https://github.com/timerring/DanmakuConvert)修改。N站弹幕获取功能参考[yt-dlp](https://github.com/yt-dlp/yt-dlp)。
 
 ## 安装
 
@@ -80,6 +80,14 @@ DANDANPLAY_PASSWORD=...
 - `ALT-.`: 显示/隐藏 弹幕
 - `ALT-Z/ALT-X`: 调整弹幕延迟
 - `ALT-N`: N站弹幕设置
+
+## 实现原理
+
+Lua 脚本通过 mpv 的 `input-ipc-server` 实现 Python 子进程与 Lua 脚本的双向通信。
+
+所有网络请求均在 Python 侧异步并行执行。同时引入文件锁，保证缓存数据一致性，支持多 mpv 实例同时运行。
+
+通过 dandanplay 元数据获取 bangumi 条目信息；通过 [bangumi-data](https://github.com/bangumi-data/bangumi-data) 获取 nicovideo 视频地址。 
 
 ## 一些碎碎念
 
