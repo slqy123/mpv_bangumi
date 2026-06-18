@@ -62,10 +62,11 @@ class MPVBangumi:
     def clear_comments(self):
         self.__comments = {}
 
-    def update_comments(self, source: str, comments: list[dict]):
+    def update_comments(self, source: str, comments: list[dict], silent: bool = False):
         """comments in dandanplay style"""
         self.__comments[source] = comments
-        logger.info(f"source {source}: {len(comments)} danmakus")
+        if not silent:
+            logger.info(f"source {source}: {len(comments)} danmakus")
 
         events = convert_dandanplay_json2danmaku_events(
             list(chain(*self.__comments.values()))

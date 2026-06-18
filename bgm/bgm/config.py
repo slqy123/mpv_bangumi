@@ -24,9 +24,16 @@ class DanmakuConfig(BaseModel):
     transparency: int = 0x30
 
 
+class LLMConfig(BaseModel):
+    enabled: bool = False
+    base_url: str = "https://api.openai.com/v1"
+    model: str = "gpt-4o-mini"
+
+
 class Config(BaseModel):
     storages: list[DirectoryPath]
     danmaku: DanmakuConfig
+    llm: LLMConfig | None = None
 
 
 def init_config():

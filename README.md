@@ -7,7 +7,7 @@
 - 自动识别番剧并加载弹幕
 - 发送弹幕至dandanplay弹幕库（目前接口权限未开放，暂不可用）
 - 自动同步bangumi追番进度
-- [N站](https://www.nicovideo.jp)弹幕支持
+- [N站](https://www.nicovideo.jp)弹幕支持（支持LLM[自动翻译](#llm-config)）
 
 其中弹幕播放功能参考[uosc_danmaku](https://github.com/Tony15246/uosc_danmaku)。
 弹幕转换的功能主要基于[dmconvert](https://github.com/timerring/DanmakuConvert)修改。N站弹幕获取功能参考[yt-dlp](https://github.com/yt-dlp/yt-dlp)。
@@ -42,7 +42,10 @@ pip install -e .
 
 运行`bgm`命令，将交互式生成初始配置文件。
 
+4. 可选配置项
+
 使用 `python -c "import appdirs; print(appdirs.user_config_dir('bgm'))"` 可查看配置文件夹位置。
+
 可以在 `config.toml` 中修改弹幕样式：
 ```toml
 [danmaku]
@@ -64,11 +67,25 @@ outline = 1.0
 # 透明度
 transparency = 0x30
 ```
+
+<span id="llm-config">以及LLM自动翻译的相关设置：</span>
+```toml
+[llm]
+enabled = true
+base_url = "https://api.deepseek.com"  
+model = "deepseek-v4-flash"            
+```
+
 `.env`中可以自定义API令牌
 ```shell
 DANDANPLAY_APPID=...
 DANDANPLAY_APPSECRET=...
+
 BGM_ACCESS_TOKEN=...
+
+LLM_API_KEY="sk-..."
+
+# 暂时无用
 DANDANPLAY_USERNAME=...
 DANDANPLAY_PASSWORD=...
 ```

@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 import re
 import time
 from pathlib import Path
@@ -12,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 import portalocker
 
 from bgm import logger
+from bgm.config import config
 from bgm.source import DanmakuSource
 
 if TYPE_CHECKING:
@@ -530,7 +532,7 @@ class NicoNicoSource(DanmakuSource):
             danmaku_new.append({"p": f"{timestamp},{pos},{color},{user}", "m": comment})
         return danmaku_new
 
-    def fetch(self, ep: int) -> tuple[list[dict], str] | None:
+    def fetch(self, ep: int) -> tuple[list[dict], str, str] | None:
         video_id = self.map_ep(ep)
         if video_id is None:
             return None
@@ -547,7 +549,7 @@ class NicoNicoSource(DanmakuSource):
             _ = json.loads(out_path.read_text(encoding="utf-8"))
             result, desc = _["result"], _["desc"]
 
-        return self.convert_format(result), desc
+        return self.convert_format(result), desc, video_id
 
 async def niconico_fetch_danmaku(
     ctx: "MPVBangumi", episode_id: int, options: dict, context: DanmakuSource.Context
@@ -563,9 +565,23 @@ async def niconico_fetch_danmaku(
         if not res:
             logger.warning("Failed to get nicovideo danmaku!")
             return
-        danmaku, desc = res
+        danmaku, desc, video_id = res
         logger.info("nicovideo title: %s", desc)
-        ctx.update_comments("niconico", danmaku)
+
+        if config.llm and config.llm.enabled and os.environ.get("LLM_API_KEY"):
+            logger.info("Start trasnlation with LLM")
+            from bgm.llm import DanmakuTranslator
+            translator = DanmakuTranslator(context.data_path, video_id)
+            try:
+                async def on_translation_update(partial_danmaku, done):
+                    ctx.update_comments("niconico", partial_danmaku, silent=not done)
+
+                await translator.translate(danmaku, desc, on_update=on_translation_update)
+            except Exception:
+                logger.warning("llm: translation failed, using original danmaku")
+                ctx.update_comments("niconico", danmaku)
+        else:
+            ctx.update_comments("niconico", danmaku)
 
 def main() -> int:
     import argparse
