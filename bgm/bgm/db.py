@@ -201,6 +201,7 @@ class DB:
             yield None
             return
 
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.touch(exist_ok=True)
         with portalocker.Lock(
             path, mode="r+b", flags=portalocker.LockFlags.EXCLUSIVE
@@ -223,6 +224,7 @@ class DB:
             yield None
             return
 
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.touch(exist_ok=True)
         with portalocker.Lock(
             path, mode="r+b", flags=portalocker.LockFlags.EXCLUSIVE

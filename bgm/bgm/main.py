@@ -45,11 +45,8 @@ def dispatch(name: str, value: str):
 
 
 def main():
+    import time
+
     bgm.resp_message("ready", {"ok": True})
-    try:
-        while True:
-            mpv.wait_for_property("duration")
-    except Exception:
-        if LOG_LEVEL <= logging.DEBUG:
-            traceback.print_exc()
-        exit(0)
+    while True:
+        time.sleep(30)
