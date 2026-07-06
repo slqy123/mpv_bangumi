@@ -7,6 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "aiohttp>=3.11.18",
     "appdirs>=1.4.4",
+    "beautifulsoup4>=4.12.0",
     "click>=8.1.8",
     "dotenv>=0.9.9",
     "portalocker>=3.2.0",

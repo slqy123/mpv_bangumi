@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING, Any
 
 import portalocker
 
+from bs4 import BeautifulSoup
+
 from bgm import logger
 from bgm.config import config
 from bgm.source import DanmakuSource
@@ -253,61 +255,13 @@ def get_series_data(series: str) -> dict[str, str]:
         raise RuntimeError(f'Unable to parse episodes from series page: {url}')
     return episode_map
 
-def _decode_js_string(value: str) -> str:
-    try:
-        return json.loads(f'"{value}"')
-    except json.JSONDecodeError:
-        return html.unescape(value)
-
-
-def _parse_tktk_video_items(source: str, detail_id: str) -> list[dict[str, str]]:
-    items: list[dict[str, str]] = []
-    array_re = re.compile(
-        r"window\.TKTK\[\s*['\"](?P<key>[^'\"]+)['\"]\s*\]\s*=\s*\[(?P<body>.*?)\]\s*;",
-        flags=re.DOTALL,
-    )
-    object_re = re.compile(r'\{(?P<object>.*?)\}', flags=re.DOTALL)
-    title_re = re.compile(
-        r'\btitle\s*:\s*(?:[A-Za-z_]\w*\s*\(\s*)*"(?P<title>(?:\\.|[^"\\])*)"\s*(?:\)\s*)*',
-        flags=re.DOTALL,
-    )
-    watch_re = re.compile(
-        r'\bwatchUrl\s*:\s*(?:[A-Za-z_]\w*\s*\(\s*)*"(?P<watch>(?:\\.|[^"\\])*)"\s*(?:\)\s*)*',
-        flags=re.DOTALL,
-    )
-
-    for array_match in array_re.finditer(source):
-        key = array_match.group('key')
-        if not key.startswith(f'{detail_id}_'):
-            continue
-        if not key.endswith(('_ch_video', '_d_video')):
-            continue
-
-        body = array_match.group('body')
-        for object_match in object_re.finditer(body):
-            obj = object_match.group('object')
-            title_match = title_re.search(obj)
-            watch_match = watch_re.search(obj)
-            if not title_match or not watch_match:
-                continue
-
-            title = _decode_js_string(title_match.group('title')).strip()
-            watch_url = _decode_js_string(watch_match.group('watch')).strip()
-            mobj = WATCH_PATH_RE.search(watch_url)
-            if not mobj:
-                continue
-
-            items.append({'title': title, 'video_id': mobj.group('id')})
-
-    return items
 
 
 def get_detail_data(detail: str) -> dict[str, str]:
     import urllib.request
-    import urllib.parse
 
     detail_id = parse_detail_id(detail)
-    url = f'https://anime.nicovideo.jp/detail/{detail_id}/index.html'
+    url = f'https://ch.nicovideo.jp/{detail_id}'
     request = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
@@ -315,36 +269,28 @@ def get_detail_data(detail: str) -> dict[str, str]:
     except Exception:
         return {}
 
-    sources = [webpage]
-    script_src_re = re.compile(r'<script[^>]+src=["\'](?P<src>[^"\']+)["\']', flags=re.IGNORECASE)
-    for match in script_src_re.finditer(webpage):
-        src = match.group('src')
-        if f'/detail/{detail_id}/' not in src:
+    soup = BeautifulSoup(webpage, 'html.parser')
+    items: list[dict[str, str]] = []
+    for video in soup.select('.g-video'):
+        link = video.select_one('a.g-video-link')
+        if not link:
             continue
-        if not src.endswith(('/state.js', '/payload.js')):
+        href = link.get('href', '')
+        mobj = WATCH_PATH_RE.search(href)
+        if not mobj:
             continue
-
-        script_url = urllib.parse.urljoin(url, src)
-        try:
-            script_req = urllib.request.Request(script_url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(script_req, timeout=30) as script_response:
-                script_body = script_response.read().decode('utf-8', errors='replace')
-            sources.append(script_body)
-        except Exception:
-            continue
-
-    parsed_items: list[dict[str, str]] = []
-    for source in sources:
-        parsed_items.extend(_parse_tktk_video_items(source, detail_id))
+        title_elem = video.select_one('.g-video-title a') or link
+        title = title_elem.get_text(strip=True)
+        items.append({'title': title, 'video_id': mobj.group('id')})
 
     episode_map = {}
-    for idx, item in enumerate(parsed_items, start=1):
+    for idx, item in enumerate(items, start=1):
         episode_key = _extract_episode_key(item.get('title', ''), idx)
         if episode_key not in episode_map:
             episode_map[episode_key] = item['video_id']
 
     if not episode_map:
-        raise RuntimeError(f'Unable to parse episodes from detail page: {url}')
+        raise RuntimeError(f'Unable to parse episodes from channel page: {url}')
     return episode_map
 
 def parse_video_id(value: str) -> str:
