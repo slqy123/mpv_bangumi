@@ -79,7 +79,8 @@ function M.send_danmaku(episode_id, comment)
     episode_id = episode_id,
     color = color,
     position = position,
-    time = time_pos
+    time = time_pos,
+    comment = comment
   })
 end
 
