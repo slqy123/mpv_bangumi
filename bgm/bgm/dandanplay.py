@@ -223,11 +223,14 @@ class DanDanAPI(API):
             return
         return j["bangumi"]
 
-    async def search_anime(self, keyword: str, type_: str | None = None):
+    async def search_anime(self, keyword: str, type_: str | None = None, v2: bool|None = None):
         """
         type:[ tvseries, tvspecial, ova, movie, musicvideo, web, other, jpmovie, jpdrama, unknown, tmdbtv, tmdbmovie ]
         """
-        params = {"keyword": keyword}
+        params = {
+            "keyword": keyword,
+            "v2": "true" if v2 or (os.getenv("DANDANPLAY_API_V2") == "1") else "false",
+        }
         if type_:
             params["type"] = type_
         j = await self.get("search/anime", params)

@@ -1,4 +1,3 @@
-import asyncio
 from sqlite3.dbapi2 import Time
 from typing import Literal, Protocol, TYPE_CHECKING
 import json
@@ -23,7 +22,7 @@ class DanmakuSource(Protocol):
 
     def __init__(self, options: dict, context: Context): ...
 
-    def fetch(self, ep: int) -> tuple[list[dict], str, str] | None: ...
+    async def fetch(self, ep: int) -> tuple[list[dict], str, str] | None: ...
 
 
 async def get_sources(ctx: "MPVBangumi", episode_info: 'EpisodeMatch') -> None:
@@ -84,12 +83,14 @@ def get_bangumi_data():
             return None
     return None
 
-def _get_or_update_bangumi_data() -> dict:
+async def _get_or_update_bangumi_data() -> dict:
+    import aiohttp
+
     with db.check_update(DATA_PATH.joinpath("bangumi-data.json"), 7 * 24 * 3600) as writer:
         if writer is not None:
-            import requests
-            res = requests.get("https://unpkg.com/bangumi-data@0.3/dist/data.json")
-            res_json = res.json()
+            async with aiohttp.ClientSession() as session:
+                async with session.get("https://unpkg.com/bangumi-data@0.3/dist/data.json") as res:
+                    res_json = await res.json()
             writer(json.dumps(res_json, ensure_ascii=False))
             return res_json
 
@@ -99,5 +100,5 @@ def _get_or_update_bangumi_data() -> dict:
 
 async def get_or_update_bangumi_data() -> dict:
     DATA_PATH.mkdir(parents=True, exist_ok=True)
-    return await asyncio.to_thread(_get_or_update_bangumi_data)
+    return await _get_or_update_bangumi_data()
 

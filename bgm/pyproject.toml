@@ -14,7 +14,6 @@ dependencies = [
     "pydantic>=2.11.4",
     "pymediainfo>=7.0.1",
     "python-mpv-jsonipc>=1.2.2",
-    "requests>=2.32.3",
     "rich>=14.0.0",
     "tenacity>=9.1.4",
     "toml>=0.10.2",
@@ -27,3 +26,6 @@ bgm = "bgm.main:main"
 [[tool.mypy.overrides]]
 module = ["*.*"]
 follow_untyped_imports = true
+
+[tool.uv]
+package=true

@@ -10,6 +10,7 @@ from html.parser import HTMLParser
 import html
 from typing import TYPE_CHECKING, Any
 
+import aiohttp
 import portalocker
 
 from bs4 import BeautifulSoup
@@ -232,13 +233,12 @@ def _extract_episode_key(title: str, index: int) -> str:
     return str(index)
 
 
-def get_series_data(series: str) -> dict[str, str]:
-    import urllib.request
+async def get_series_data(series: str) -> dict[str, str]:
     series_id = parse_series_id(series)
     url = f'{BASE_URL}/series/{series_id}'
-    request = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-    with urllib.request.urlopen(request, timeout=30) as response:
-        webpage = response.read().decode('utf-8', errors='replace')
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers={'User-Agent': 'Mozilla/5.0'}) as response:
+            webpage = await response.text()
 
     parser = _NiconicoSeriesParser()
     parser.feed(webpage)
@@ -257,15 +257,13 @@ def get_series_data(series: str) -> dict[str, str]:
 
 
 
-def get_detail_data(detail: str) -> dict[str, str]:
-    import urllib.request
-
+async def get_detail_data(detail: str) -> dict[str, str]:
     detail_id = parse_detail_id(detail)
     url = f'https://ch.nicovideo.jp/{detail_id}'
-    request = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            webpage = response.read().decode('utf-8', errors='replace')
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers={'User-Agent': 'Mozilla/5.0'}) as response:
+                webpage = await response.text()
     except Exception:
         return {}
 
@@ -302,44 +300,47 @@ def parse_video_id(value: str) -> str:
     raise ValueError(f'Invalid niconico URL or ID: {value}')
 
 
-def http_json(url: str, *, headers=None, query=None, data=None) -> dict:
-    import urllib.error
-    import urllib.parse
-    import urllib.request
-
-    if query:
-        url = f'{url}?{urllib.parse.urlencode(query)}'
+async def http_json(url: str, *, headers=None, query=None, data=None) -> dict:
     req_headers = {'User-Agent': 'Mozilla/5.0', **(headers or {})}
-    request = urllib.request.Request(url, headers=req_headers, data=data)
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            raw = response.read()
-    except urllib.error.HTTPError as exc:
+    timeout = aiohttp.ClientTimeout(total=30)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
         try:
-            body = exc.read().decode('utf-8', errors='replace')
-        except Exception:
-            body = '<unreadable>'
-        if exc.code in {400, 404}:
-            return json.loads(body)
-        raise RuntimeError(f'HTTP {exc.code} for {url}: {body}') from exc
+            if data is not None:
+                async with session.post(url, headers=req_headers, data=data) as resp:
+                    resp.raise_for_status()
+                    raw = await resp.read()
+            else:
+                async with session.get(url, headers=req_headers, params=query) as resp:
+                    resp.raise_for_status()
+                    raw = await resp.read()
+        except aiohttp.ClientResponseError as exc:
+            try:
+                body = await exc.message
+            except Exception:
+                body = '<unreadable>'
+            if exc.status in {400, 404}:
+                try:
+                    return json.loads(await exc.text())
+                except Exception:
+                    return {}
+            raise RuntimeError(f'HTTP {exc.status} for {url}: {body}') from exc
+
     return json.loads(raw.decode('utf-8'))
 
 
-def fetch_api_data(video_id: str) -> dict:
-    return http_json(
+async def fetch_api_data(video_id: str) -> dict:
+    return await http_json(
         f'{BASE_URL}/api/watch/v3_guest/{video_id}',
         headers=HEADERS,
         query={'actionTrackId': f'AAAAAAAAAA_{round(time.time() * 1000)}'},
     )
 
 
-def fetch_page_data(video_id: str) -> dict:
-    import urllib.request
-
+async def fetch_page_data(video_id: str) -> dict:
     url = f'{BASE_URL}/watch/{video_id}'
-    request = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-    with urllib.request.urlopen(request, timeout=30) as response:
-        webpage = response.read().decode('utf-8', errors='replace')
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers={'User-Agent': 'Mozilla/5.0'}) as response:
+            webpage = await response.text()
 
     mobj = re.search(
         r'<meta[^>]+name=["\']server-response["\'][^>]+content=(["\'])(?P<content>.+?)\1',
@@ -355,7 +356,7 @@ def fetch_page_data(video_id: str) -> dict:
     }
 
 
-def fetch_comments(api_data: dict, *, flatten: bool = True) -> list[dict]:
+async def fetch_comments(api_data: dict, *, flatten: bool = True) -> list[dict]:
     comments_info = (((api_data.get('data') or {}).get('comment') or {}).get('nvComment') or {})
     server = comments_info.get('server')
     if not server:
@@ -366,7 +367,7 @@ def fetch_comments(api_data: dict, *, flatten: bool = True) -> list[dict]:
         'params': comments_info.get('params'),
         'threadKey': comments_info.get('threadKey'),
     }
-    threads_resp = http_json(
+    threads_resp = await http_json(
         f'{server}/v1/threads',
         headers={
             'Content-Type': 'text/plain;charset=UTF-8',
@@ -395,9 +396,9 @@ class NicoNicoSource(DanmakuSource):
         self.series: int|None = options.get("series")
         self.offset: int = options.get("offset", 0)
 
-    def _update_series_info(self) -> dict|None:
+    async def _update_series_info(self) -> dict|None:
         if self.series is not None:
-            _series_map = get_series_data(str(self.series))
+            _series_map = await get_series_data(str(self.series))
         else:
             if self.context.ids is None or self.context.ids.bgm_id is None:
                 logger.error("Failed to get bgm id")
@@ -421,7 +422,7 @@ class NicoNicoSource(DanmakuSource):
                 return None
             nico_anime_id = item["sites"][sites.index("nicovideo")]["id"]
             logger.debug("Get nico_anime_id: %s", nico_anime_id)
-            _series_map = get_detail_data(nico_anime_id)
+            _series_map = await get_detail_data(nico_anime_id)
 
         series_map: dict[str, Any] = {
             "series": self.series,
@@ -440,7 +441,7 @@ class NicoNicoSource(DanmakuSource):
             return {}
 
 
-    def map_ep(self, ep: int):
+    async def map_ep(self, ep: int):
         ep += self.offset
         info = self._get_series_info()
         if (
@@ -448,7 +449,7 @@ class NicoNicoSource(DanmakuSource):
             or info.get("offset") != self.offset
             or info.get(str(ep)) is None
         ):
-            info = self._update_series_info()
+            info = await self._update_series_info()
             if info is None:
                 return None
         try:
@@ -478,8 +479,8 @@ class NicoNicoSource(DanmakuSource):
             danmaku_new.append({"p": f"{timestamp},{pos},{color},{user}", "m": comment})
         return danmaku_new
 
-    def fetch(self, ep: int) -> tuple[list[dict], str, str] | None:
-        video_id = self.map_ep(ep)
+    async def fetch(self, ep: int) -> tuple[list[dict], str, str] | None:
+        video_id = await self.map_ep(ep)
         if video_id is None:
             return None
         logger.debug("NicoNico video_id: %s", video_id)
@@ -487,8 +488,8 @@ class NicoNicoSource(DanmakuSource):
         out_path = self.context.data_path / f'{video_id}.comments.json'
 
         if self.context.db.is_outdated(out_path):
-            api_data = fetch_page_data(video_id)
-            result = fetch_comments(api_data, flatten=True)
+            api_data = await fetch_page_data(video_id)
+            result = await fetch_comments(api_data, flatten=True)
             desc = api_data["data"]["video"]["title"]
             out_path.write_text(json.dumps({"result": result, "desc": desc}, ensure_ascii=False, indent=2), encoding='utf-8')
         else:
@@ -505,9 +506,7 @@ async def niconico_fetch_danmaku(
         mode="w",
         flags=portalocker.LockFlags.EXCLUSIVE,
     ):
-        res = await asyncio.to_thread(
-            lambda: NicoNicoSource(options, context).fetch(episode_id % 10000)
-        )
+        res = await NicoNicoSource(options, context).fetch(episode_id % 10000)
         if not res:
             logger.warning("Failed to get nicovideo danmaku!")
             return
@@ -529,7 +528,7 @@ async def niconico_fetch_danmaku(
         else:
             ctx.update_comments("niconico", danmaku)
 
-def main() -> int:
+async def _main() -> int:
     import argparse
     parser = argparse.ArgumentParser(
         description='Download niconico comments (danmaku) as JSON')
@@ -545,7 +544,7 @@ def main() -> int:
 
     try:
         video_id = parse_video_id(args.video)
-        api_data = fetch_api_data(video_id)
+        api_data = await fetch_api_data(video_id)
 
         status = ((api_data.get('meta') or {}).get('status'))
         if status and status != 200:
@@ -556,9 +555,9 @@ def main() -> int:
         comments_info = (((api_data.get('data') or {}).get('comment') or {}).get('nvComment') or {})
         if not comments_info.get('server'):
             print('Info: nvComment data missing from guest API response; falling back to watch page metadata...')
-            api_data = fetch_page_data(video_id)
+            api_data = await fetch_page_data(video_id)
 
-        result = fetch_comments(api_data, flatten=not args.raw_threads)
+        result = await fetch_comments(api_data, flatten=not args.raw_threads)
         out_path = Path(args.output or f'{video_id}.comments.json')
         out_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
         print(f'Wrote {len(result)} {"threads" if args.raw_threads else "comments"} to {out_path}')
@@ -566,6 +565,9 @@ def main() -> int:
     except Exception as exc:
         print(f'ERROR: {exc}')
         return 1
+
+def main() -> int:
+    return asyncio.run(_main())
 
 
 if __name__ == '__main__':
