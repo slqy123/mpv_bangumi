@@ -265,7 +265,7 @@ def convert_dandanplay_json2danmaku_events(
         element = ET.SubElement(
             root, "d", {"p": p, "uid": str(abs(hash(uid))), "user": uid}
         )
-        element.text = m
+        element.text = m.replace("\n", "")
 
     return draw_danmaku(
         root=root,

@@ -274,6 +274,7 @@ async def get_detail_data(detail: str) -> dict[str, str]:
         if not link:
             continue
         href = link.get('href', '')
+        assert isinstance(href, str)
         mobj = WATCH_PATH_RE.search(href)
         if not mobj:
             continue
@@ -314,15 +315,9 @@ async def http_json(url: str, *, headers=None, query=None, data=None) -> dict:
                     resp.raise_for_status()
                     raw = await resp.read()
         except aiohttp.ClientResponseError as exc:
-            try:
-                body = await exc.message
-            except Exception:
-                body = '<unreadable>'
+            body = exc.message
             if exc.status in {400, 404}:
-                try:
-                    return json.loads(await exc.text())
-                except Exception:
-                    return {}
+                return {}
             raise RuntimeError(f'HTTP {exc.status} for {url}: {body}') from exc
 
     return json.loads(raw.decode('utf-8'))
@@ -467,16 +462,18 @@ class NicoNicoSource(DanmakuSource):
             user = d["userId"]
             timestamp = f"{d['vposMs'] / 1000:.2f}"
             comment = d["body"]
+            comment = re.sub(r"\n+", "\n", comment)
             pos = 1
             color = 0xFFFFFF
             for c in d["commands"]:
                 if c == "ue":
-                    pos = 1
+                    pos = 4
                 elif c == "shita":
-                    pos = 2
+                    pos = 5
                 elif c in NiconicoColorMap:
                     color = NiconicoColorMap[c]
-            danmaku_new.append({"p": f"{timestamp},{pos},{color},{user}", "m": comment})
+            for c in comment.splitlines():
+                danmaku_new.append({"p": f"{timestamp},{pos},{color},{user}", "m": c})
         return danmaku_new
 
     async def fetch(self, ep: int) -> tuple[list[dict], str, str] | None:
