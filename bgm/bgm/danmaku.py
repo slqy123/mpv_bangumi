@@ -62,7 +62,7 @@ def get_position_y(font_size, appear_time, text_length, resolution_x, roll_time,
 
 
 # Top danmaku algorithm
-def get_fixed_y(font_size, appear_time, resolution_y, array):
+def get_fixed_y(font_size, appear_time, array, fix_time):
     best_row = 0
     best_bias = -1
     for i in range(array.rows):
@@ -72,7 +72,7 @@ def get_fixed_y(font_size, appear_time, resolution_y, array):
             return font_size * i + 1
         else:
             delta_time = appear_time - previous_appear_time
-            if delta_time > 5:
+            if delta_time > fix_time:
                 array.set_time_length(i, appear_time, 0)
                 return font_size * i + 1
             else:
@@ -142,115 +142,68 @@ class DanmakuArray:
 
 
 def draw_danmaku(
-    root,
-    font_size,
-    roll_array,
-    btm_array,
-    resolution_x,
-    resolution_y,
+    events: list[DanmakuEvent],
+    resolution: tuple[int, int],
+    font_size: int,
     roll_time: int | float,
     fix_time: int | float,
+    displayarea: float = 0.5,
 ) -> list[DanmakuEvent]:
-    # Convert each danmaku
-    events: list[DanmakuEvent] = []
-    all_normal_danmaku = root.findall(".//d")
-    for d in all_normal_danmaku:
-        # Parse attributes
-        p_attrs = d.get("p").split(",")
-        appear_time = float(p_attrs[0])
-        danmaku_type = int(p_attrs[1])
+    display_height = int(resolution[1] * displayarea)
 
-        # Convert color from decimal to hex
-        color = int(p_attrs[3])
-        color_hex = hex(color)
-        color_reverse = "".join(
-            reversed([color_hex[i : i + 2] for i in range(0, len(color_hex), 2)])
-        )
-        color_hex = color_reverse[:-2].ljust(6, "0").upper()  # Remove 0x
-        color_text = f"\\c&H{color_hex}"
+    roll_array = DanmakuArray(resolution[0], display_height, font_size)
+    btm_array = DanmakuArray(resolution[0], display_height, font_size)
 
-        # text = remove_emojis(d.text, ".")
-        text = d.text.strip()
-
-        # For rolling danmakus (most common type)
-        if danmaku_type == 1:
-            end_time = appear_time + roll_time
-            style = "R2L"
-            text_length = get_str_len(
-                text, font_size
-            )  # Estimate the length of the text
-            x1 = resolution_x + int(text_length / 2)  # Start from right edge
-            x2 = -int(text_length / 2)  # End at left edge
+    for event in events:
+        if event.style == "R2L":
+            event.end_time = event.start_time + roll_time
+            text_length = get_str_len(event.text, font_size)
+            x1 = resolution[0] + int(text_length / 2)
+            x2 = -int(text_length / 2)
             y = get_position_y(
                 font_size,
-                appear_time,
+                event.start_time,
                 text_length,
-                resolution_x,
+                resolution[0],
                 roll_time,
                 roll_array,
             )
-            # effect = f"\\move({x1},{y},{x2},{y})"
-            move = (x1, y, x2, y)
-            pos = None
-
-        # For BTM danmakus
+            event.move = (x1, y, x2, y)
         else:
-            end_time = appear_time + fix_time
-            style = "TOP"
-            x = int(resolution_x / 2)
-            y = get_fixed_y(font_size, appear_time, resolution_y, btm_array)
-            # effect = f"\\pos({x},{y})"
-            move = None
-            pos = (x, y)
-
-        # line = f"Dialogue: {layer},{start_time},{end_time},{style},,0000,0000,0000,,{{{effect}}}{{{color_text}}}{text}\n"
-        # f.write(line)
-        events.append(
-            DanmakuEvent(
-                start_time=appear_time,
-                end_time=end_time,
-                style=style,
-                text=text,
-                pos=pos,
-                move=move,
-                color=color_text,
-            )
-        )
+            event.end_time = event.start_time + fix_time
+            x = int(resolution[0] / 2)
+            y = get_fixed_y(font_size, event.start_time, btm_array, fix_time)
+            event.pos = (x, y)
     return events
 
 
 def convert_dandanplay_json2danmaku_events(
     dandanplay_json: Path | list[dict] | dict,
-    font_size: int = 36,
     resolution: tuple[int, int] = (1920, 1080),
 ) -> list[DanmakuEvent]:
-    import xml.etree.ElementTree as ET
-
     def __get_timestamp(o):
         p = o.get("p")
         if not p:
             return 0
-        # timestamp, mode, *_ = p.split(",", 2)
-        # return (int(mode), float(timestamp))
         timestamp, *_ = p.split(",", 1)
         return float(timestamp)
 
     if isinstance(dandanplay_json, Path):
-        danmaku_data = json.loads(dandanplay_json.read_text(encoding="utf-8"))
-    elif isinstance(dandanplay_json, dict):
-        danmaku_data = dandanplay_json["comments"]
+        data = json.loads(dandanplay_json.read_text(encoding="utf-8"))
     else:
-        danmaku_data = dandanplay_json
+        data = dandanplay_json
+    if isinstance(data, dict):
+        danmaku_data = data["comments"]
+    else:
+        danmaku_data = data
     assert isinstance(danmaku_data, list)
     danmaku_data = sorted(danmaku_data, key=__get_timestamp)
 
-    root = ET.Element("i")
-
     danmaku_set = set()
+    events = []
     for danmaku in danmaku_data:
         p = danmaku.get("p")
         m = danmaku.get("m")
-        shift = float(danmaku.get("shift", 0))
         if not (m and p):
             continue
 
@@ -260,22 +213,37 @@ def convert_dandanplay_json2danmaku_events(
             continue
         danmaku_set.add((m, timestamp))
 
-        timestamp = float(timestamp) + shift
-        p = f"{timestamp},{mode},25,{color},,,,"
-        element = ET.SubElement(
-            root, "d", {"p": p, "uid": str(abs(hash(uid))), "user": uid}
+        shift = float(danmaku.get("shift", 0))
+        appear_time = float(timestamp) + shift
+
+        color_hex = hex(int(color))
+        color_reverse = "".join(
+            reversed([color_hex[i : i + 2] for i in range(0, len(color_hex), 2)])
         )
-        element.text = m.replace("\n", "")
+        color_hex = color_reverse[:-2].ljust(6, "0").upper()
+        color_text = f"\\c&H{color_hex}"
+
+        style = "R2L" if mode == "1" else "TOP"
+
+        events.append(
+            DanmakuEvent(
+                start_time=appear_time,
+                end_time=0.0,
+                style=style,
+                text=m.strip().replace("\n", " "),
+                pos=None,
+                move=None,
+                color=color_text,
+            )
+        )
 
     return draw_danmaku(
-        root=root,
-        font_size=font_size,
-        roll_array=DanmakuArray(*resolution, font_size),
-        btm_array=DanmakuArray(*resolution, font_size),
-        resolution_x=resolution[0],
-        resolution_y=resolution[1],
+        events,
+        resolution=resolution,
+        font_size=config.danmaku.fontsize,
         roll_time=config.danmaku.scrolltime,
         fix_time=config.danmaku.fixtime,
+        displayarea=config.danmaku.displayarea,
     )
 
 
