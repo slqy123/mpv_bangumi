@@ -172,7 +172,7 @@ function M:render()
       end
 
       if ass_text then
-        if event.layer == nil or tonumber(event.layer) == 0 then
+        if event.style == "R2L" then
           table.insert(ass_events_low, ass_text)
         else
           table.insert(ass_events_high, ass_text)
