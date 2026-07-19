@@ -85,18 +85,38 @@ def get_bangumi_data():
 
 async def _get_or_update_bangumi_data() -> dict:
     import aiohttp
+    import tarfile
+    import io
 
-    with db.check_update(DATA_PATH.joinpath("bangumi-data.json"), 7 * 24 * 3600) as writer:
+    with db.check_update(
+        DATA_PATH.joinpath("bangumi-data.json"), 1 * 12 * 3600
+    ) as writer:
         if writer is not None:
             async with aiohttp.ClientSession() as session:
-                async with session.get("https://unpkg.com/bangumi-data@0.3/dist/data.json") as res:
-                    res_json = await res.json()
-            writer(json.dumps(res_json, ensure_ascii=False))
-            return res_json
+                async with session.get(
+                    "https://registry.npmmirror.com/bangumi-data/latest"
+                ) as meta_res:
+                    meta = await meta_res.json()
+                pub_time = meta["publish_time"] / 1000
+                bangumi_data_path = DATA_PATH.joinpath("bangumi-data.json")
+                if bangumi_data_path.stat().st_mtime >= pub_time:
+                    data = get_bangumi_data()
+                    assert data is not None
+                    return data
+                tarball_url = meta["dist"]["tarball"]
+                async with session.get(tarball_url) as res:
+                    raw = await res.read()
+            with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as tar:
+                f = tar.extractfile("package/dist/data.json")
+                assert f is not None
+                res_str = f.read().decode()
+            writer(res_str)
+            return json.loads(res_str)
 
     data = get_bangumi_data()
     assert data is not None
     return data
+
 
 async def get_or_update_bangumi_data() -> dict:
     DATA_PATH.mkdir(parents=True, exist_ok=True)
