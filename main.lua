@@ -400,7 +400,7 @@ mp.register_script_message("mpvbangumi-action", function(_args)
   if action == "log" then
     handle_log(data.level, data.msg)
   elseif action == "ready" then
-    mp.msg.info("mpv python ipc ready")
+    mp.msg.verbose("mpv python ipc ready")
     BgmReady = true
     init()
   elseif action == "match" then

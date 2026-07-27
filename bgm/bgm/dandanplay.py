@@ -319,7 +319,7 @@ async def match_video(ctx: 'MPVBangumi', video: Path, force_id: int | None = Non
     """Match dandanplay epsisode info for a video file."""
     video = video.absolute()
     if not any(video.is_relative_to(storage) for storage in config.storages):
-        logger.info(f"Skip video {video} not in the storage path {config.storages}.")
+        logger.debug(f"Skip video {video} not in the storage path {config.storages}.")
         return
 
     res = db.get(path=str(video))
