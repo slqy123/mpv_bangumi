@@ -148,4 +148,14 @@ function M.is_protocol(path)
     return type(path) == 'string' and (path:find('^%a[%w.+-]-://') ~= nil or path:find('^%a[%w.+-]-:%?') ~= nil)
 end
 
+function M.is_video()
+    local track_list = mp.get_property_native("track-list") or {}
+    for _, track in ipairs(track_list) do
+        if track["type"] == "video" and not track["albumart"] then
+            return true
+        end
+    end
+    return false
+end
+
 return M

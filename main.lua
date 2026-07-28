@@ -116,8 +116,17 @@ local function init(episode_id)
 end
 
 mp.register_event("file-loaded", function()
-  if utils.is_protocol(mp.get_property "path") then
+  local path = mp.get_property "path"
+  if path == "-" then
+    mp.msg.verbose("Skipping init for stdin stream:", mp.get_property "path")
+    return
+  end
+  if utils.is_protocol(path) then
     mp.msg.verbose("Skipping init for protocol:", mp.get_property "path")
+    return
+  end
+  if not utils.is_video() then
+    mp.msg.verbose("No video tracks, skip init:", mp.get_property "path")
     return
   end
   init()
