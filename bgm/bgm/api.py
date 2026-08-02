@@ -1,9 +1,17 @@
-import os
 import json
+import os
+from typing import ClassVar
+
 import aiohttp
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-from bgm import logger
-from bgm import DATA_PATH
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
+
+from bgm import DATA_PATH, logger
+
 
 class API:
     API_BASE=""
@@ -66,7 +74,7 @@ class API:
 class BangumiAPI(API):
     API_BASE = "https://api.bgm.tv"
     ACCESS_TOKEN = os.environ["BGM_ACCESS_TOKEN"]
-    default_headers = {
+    default_headers: ClassVar[dict[str, str]] = {
         "accept": "application/json",
         "Content-Type": "application/json",
         "User-Agent": "mpv_bangumi/private",

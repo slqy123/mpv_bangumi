@@ -27,5 +27,11 @@ bgm = "bgm.main:main"
 module = ["*.*"]
 follow_untyped_imports = true
 
+[tool.ruff.lint]
+# ASYNC230: blocking open() in async fns — small local JSON reads/writes
+# (ms-level) executed in the dedicated AsyncWorker event loop.
+# BLE001: broad except Exception is deliberate for graceful degradation.
+ignore = ["ASYNC230", "BLE001"]
+
 [tool.uv]
 package=true

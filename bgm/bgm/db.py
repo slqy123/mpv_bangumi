@@ -1,15 +1,16 @@
 import contextlib
-import sqlite3
-from typing import Any, Callable, Literal, NamedTuple, TypedDict, Unpack, NotRequired
-from bgm import DATA_PATH
-from pydantic import BaseModel
-import json
 import datetime
-from bgm import logger
-from pathlib import Path
-import portalocker
+import json
+import sqlite3
 from collections import Counter
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any, Literal, NamedTuple, NotRequired, TypedDict, Unpack
 
+import portalocker
+from pydantic import BaseModel
+
+from bgm import DATA_PATH, logger
 from bgm.utils import extract_info_from_filename
 
 
@@ -64,7 +65,7 @@ class DB:
         )
 
     def get(self, **query: Unpack[QueryDict]):
-        query_str = " AND ".join(f"{k}=?" for k in query.keys())
+        query_str = " AND ".join(f"{k}=?" for k in query)
         sql = f"SELECT path, bgm_id, dandanplay_id FROM {self.TABLE_NAME} WHERE {query_str}"
         self.cursor.execute(sql, tuple(query.values()))
         result = self.cursor.fetchone()
@@ -80,7 +81,7 @@ class DB:
         results = self.cursor.fetchall()
         filenames = [Path(r[0]).name for r in results]
         episode_ids = [r[1] for r in results]
-        animes = set([r // 10000 for r in episode_ids])
+        animes = {r // 10000 for r in episode_ids}
         if len(animes) != 1:
             return None
         anime_id = animes.pop()
@@ -167,9 +168,11 @@ class DB:
             return True
         if path.stat().st_size == 0:
             return True
-        if datetime.datetime.now().timestamp() - path.stat().st_mtime > max_age:
-            return True
-        return False
+        return (
+            datetime.datetime.now(datetime.UTC).timestamp()
+            - path.stat().st_mtime
+            > max_age
+        )
 
     def get_path(
         self,

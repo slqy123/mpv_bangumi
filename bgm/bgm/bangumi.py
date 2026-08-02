@@ -1,9 +1,10 @@
 import json
 from typing import TYPE_CHECKING
+
+from bgm import logger
 from bgm.api import BangumiAPI
 from bgm.dandanplay import construct_episode_match
 from bgm.db import db
-from bgm import logger
 
 if TYPE_CHECKING:
     from bgm.mpvbangumi import MPVBangumi

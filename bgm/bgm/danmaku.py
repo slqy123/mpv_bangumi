@@ -1,9 +1,12 @@
 import json
+import sys
 from pathlib import Path
 from typing import Literal
-from bgm.config import config
-from bgm import DATA_PATH, logger
+
 from pydantic import BaseModel
+
+from bgm import DATA_PATH, logger
+from bgm.config import config
 
 
 class DanmakuEvent(BaseModel):
@@ -145,8 +148,8 @@ def draw_danmaku(
     events: list[DanmakuEvent],
     resolution: tuple[int, int],
     font_size: int,
-    roll_time: int | float,
-    fix_time: int | float,
+    roll_time: float,
+    fix_time: float,
     displayarea: float = 0.5,
 ) -> list[DanmakuEvent]:
     display_height = int(resolution[1] * displayarea)
@@ -207,7 +210,7 @@ def convert_dandanplay_json2danmaku_events(
         if not (m and p):
             continue
 
-        timestamp, mode, color, uid = p.split(",")
+        timestamp, mode, color, _uid = p.split(",")
 
         if (m, timestamp) in danmaku_set:
             continue
@@ -252,14 +255,15 @@ def convert_dandanplay_json2ass_legacy(
     ass_output: Path,
 ):
     raise NotImplementedError
-    from sh import Command
     import shutil
+
+    from sh import Command
 
     if not shutil.which(config.danmaku.danmaku_factory_path):
         logger.error(
             f"Can not find DanmakuFactory executable: {config.danmaku.danmaku_factory_path}"
         )
-        exit(-1)
+        sys.exit(-1)
 
     danmaku_data_tmp_path = DATA_PATH / "danmaku_data_tmp.json"
 
@@ -280,7 +284,7 @@ def convert_dandanplay_json2ass_legacy(
         if not (m and p):
             continue
 
-        timestamp, mode, color, uid = p.split(",")
+        timestamp, mode, color, _uid = p.split(",")
         timestamp = float(timestamp) + shift
         p = f"{timestamp},{color},{mode},25,,,"
         element = {"c": p, "m": m}
@@ -332,14 +336,14 @@ def generate_ass_events(ass_input: Path) -> str:
 
 def get_style_config():
     """style config for danmaku_render.lua"""
-    return dict(
-        fontname=config.danmaku.fontname,
-        fontsize=config.danmaku.fontsize,
-        shadow=config.danmaku.shadow,
-        bold=config.danmaku.bold,
-        displayarea=config.danmaku.displayarea,
-        outline=config.danmaku.outline,
-        transparency=config.danmaku.transparency,
-        scrolltime=config.danmaku.scrolltime,
-        fixtime=config.danmaku.fixtime,
-    )
+    return {
+        "fontname": config.danmaku.fontname,
+        "fontsize": config.danmaku.fontsize,
+        "shadow": config.danmaku.shadow,
+        "bold": config.danmaku.bold,
+        "displayarea": config.danmaku.displayarea,
+        "outline": config.danmaku.outline,
+        "transparency": config.danmaku.transparency,
+        "scrolltime": config.danmaku.scrolltime,
+        "fixtime": config.danmaku.fixtime,
+    }

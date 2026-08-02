@@ -8,7 +8,6 @@ from openai import AsyncOpenAI
 from bgm import logger
 from bgm.config import config
 
-
 SYSTEM_PROMPT = (
     "You are a danmaku (弹幕) translator. Translate Japanese danmaku comments to natural Chinese.\n"
     "Input rows: id|time|text\n"

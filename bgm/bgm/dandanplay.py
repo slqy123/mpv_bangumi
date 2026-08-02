@@ -1,28 +1,21 @@
 #!/bin/python
 import base64
-import contextlib
-from dataclasses import dataclass
 import hashlib
 import json
 import mimetypes
 import os
-from pathlib import Path
 import time
-from typing import TYPE_CHECKING, Any, List, Literal, NoReturn
+from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Literal
 
-import aiohttp
 from pymediainfo import MediaInfo
 
-from bgm import DATA_PATH
-from bgm import logger
+from bgm import DATA_PATH, logger
+from bgm.api import API
 from bgm.config import config
-from bgm.danmaku import (
-    convert_dandanplay_json2danmaku_events,
-    get_style_config,
-)
 from bgm.db import EpisodeMatch, db
 from bgm.utils import extract_info_from_filename
-from bgm.api import API
 
 if TYPE_CHECKING:
     from bgm.mpvbangumi import MPVBangumi
@@ -153,7 +146,7 @@ class DanDanAPI(API):
 
         return await self._request("GET", self.API_BASE + uri, params=params or {}, headers=dynamic_headers)
 
-    async def match(self, video_info: VideoInfo) -> List[EpisodeMatch]:
+    async def match(self, video_info: VideoInfo) -> list[EpisodeMatch]:
         data = {
             "fileName": video_info.filename,
             "fileHash": video_info.hash,

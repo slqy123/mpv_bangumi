@@ -1,23 +1,32 @@
 import json
-from typing import Any, Awaitable
 import logging
-from bgm import logger, NOTIFY_LEVEL_NUM
-from bgm.danmaku import convert_dandanplay_json2danmaku_events, get_style_config
-from bgm.db import EpisodeMatch
-from bgm.niconico import niconico_fetch_danmaku
-from bgm.source import get_sources, set_source_status
-from bgm.utils import AsyncWorker
-from bgm.dandanplay import dandanplay_get_episodes, dandanplay_login_or_update, dandanplay_search, match_video, dandanplay_comment
-from bgm.dandanplay import fetch_danmaku as dandanplay_fetch_danmaku
+from collections.abc import Awaitable
+from itertools import chain
+from pathlib import Path
+from threading import Lock
+from typing import Any
+
+from python_mpv_jsonipc import MPV
+
+from bgm import NOTIFY_LEVEL_NUM, logger
 from bgm.bangumi import (
     bangumi_fetch_episodes,
     bangumi_update_collection,
     bangumi_update_episode,
 )
-from pathlib import Path
-from itertools import chain
-from threading import Lock
-from python_mpv_jsonipc import MPV
+from bgm.dandanplay import (
+    dandanplay_comment,
+    dandanplay_get_episodes,
+    dandanplay_login_or_update,
+    dandanplay_search,
+    match_video,
+)
+from bgm.dandanplay import fetch_danmaku as dandanplay_fetch_danmaku
+from bgm.danmaku import convert_dandanplay_json2danmaku_events, get_style_config
+from bgm.db import EpisodeMatch
+from bgm.niconico import niconico_fetch_danmaku
+from bgm.source import get_sources, set_source_status
+from bgm.utils import AsyncWorker
 
 
 class MPVLogHandler(logging.Handler):

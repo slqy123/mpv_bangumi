@@ -1,8 +1,10 @@
-from functools import reduce
-import re
-from pydantic import BaseModel
 import asyncio
+import re
 import threading
+from functools import reduce
+
+from pydantic import BaseModel
+
 
 class InfoFromFileName(BaseModel):
     title: str | None

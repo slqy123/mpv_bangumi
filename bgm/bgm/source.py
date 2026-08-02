@@ -1,12 +1,11 @@
-from sqlite3.dbapi2 import Time
-from typing import Literal, Protocol, TYPE_CHECKING
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING, Protocol
 
 import portalocker
 
-from bgm import DATA_PATH, logger
+from bgm import DATA_PATH
 from bgm.db import DB, IDS, EpisodeMatch, db
 
 if TYPE_CHECKING:
@@ -84,9 +83,10 @@ def get_bangumi_data():
     return None
 
 async def _get_or_update_bangumi_data() -> dict:
-    import aiohttp
-    import tarfile
     import io
+    import tarfile
+
+    import aiohttp
 
     with db.check_update(
         DATA_PATH.joinpath("bangumi-data.json"), 1 * 12 * 3600

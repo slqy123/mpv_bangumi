@@ -1,18 +1,15 @@
-#!/usr/bin/env python3
-
 import asyncio
+import html
 import json
 import os
 import re
 import time
-from pathlib import Path
 from html.parser import HTMLParser
-import html
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import aiohttp
 import portalocker
-
 from bs4 import BeautifulSoup
 
 from bgm import logger
@@ -236,9 +233,10 @@ def _extract_episode_key(title: str, index: int) -> str:
 async def get_series_data(series: str) -> dict[str, str]:
     series_id = parse_series_id(series)
     url = f'{BASE_URL}/series/{series_id}'
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url, headers={'User-Agent': 'Mozilla/5.0'}) as response:
-            webpage = await response.text()
+    async with aiohttp.ClientSession() as session, session.get(
+        url, headers={'User-Agent': 'Mozilla/5.0'}
+    ) as response:
+        webpage = await response.text()
 
     parser = _NiconicoSeriesParser()
     parser.feed(webpage)
@@ -261,9 +259,10 @@ async def get_detail_data(detail: str) -> dict[str, str]:
     detail_id = parse_detail_id(detail)
     url = f'https://ch.nicovideo.jp/{detail_id}'
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers={'User-Agent': 'Mozilla/5.0'}) as response:
-                webpage = await response.text()
+        async with aiohttp.ClientSession() as session, session.get(
+            url, headers={'User-Agent': 'Mozilla/5.0'}
+        ) as response:
+            webpage = await response.text()
     except Exception:
         return {}
 
@@ -333,9 +332,10 @@ async def fetch_api_data(video_id: str) -> dict:
 
 async def fetch_page_data(video_id: str) -> dict:
     url = f'{BASE_URL}/watch/{video_id}'
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url, headers={'User-Agent': 'Mozilla/5.0'}) as response:
-            webpage = await response.text()
+    async with aiohttp.ClientSession() as session, session.get(
+        url, headers={'User-Agent': 'Mozilla/5.0'}
+    ) as response:
+        webpage = await response.text()
 
     mobj = re.search(
         r'<meta[^>]+name=["\']server-response["\'][^>]+content=(["\'])(?P<content>.+?)\1',
