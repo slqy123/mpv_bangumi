@@ -1,13 +1,14 @@
+import os
 import random
+import sys
+from pathlib import Path
 from typing import Literal
+
 import click
 import toml
-from bgm import CONFIG_PATH, logger
-from pathlib import Path
 from pydantic import BaseModel, DirectoryPath
-from dotenv import load_dotenv
-from io import StringIO
-import os
+
+from bgm import CONFIG_PATH, logger
 
 
 class DanmakuConfig(BaseModel):
@@ -74,21 +75,12 @@ def init_config():
 
 
 config_file = CONFIG_PATH / "config.toml"
-env_file = CONFIG_PATH / ".env"
 if not config_file.exists():
     logger.warning(f"Config file {config_file} does not exist.")
     init_config()
     assert config_file.exists()
-    exit(0)
+    sys.exit(0)
 
-# Load environment variables from .env file
-if env_file.exists():
-    env_str = env_file.read_text(encoding="utf-8")
-    logger.debug(f"Loading environment variables from {env_file}:\n{env_str}")
-    env_stream = StringIO(env_str)
-
-    # Load the environment variables
-    load_dotenv(stream=env_stream, override=False)
 assert "BGM_ACCESS_TOKEN" in os.environ
 if not ("DANDANPLAY_APPID" in os.environ and "DANDANPLAY_APPSECRET" in os.environ):
     logger.debug("Using default DandanPlay appid and appsecret.")
