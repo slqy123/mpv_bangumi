@@ -1,6 +1,7 @@
 import logging
 import os
 from io import StringIO
+from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 from typing import Any
 
@@ -35,4 +36,19 @@ class CustomLogger(logging.Logger):
 
 logging.setLoggerClass(CustomLogger)
 logger: CustomLogger = logging.getLogger(__name__)  # type: ignore[assignment]
-logger.setLevel(LOG_LEVEL)
+# Logger is DEBUG (not LOG_LEVEL) so the file handler gets full logs; the
+# console handler applies LOG_LEVEL itself (see MPVLogHandler).
+logger.setLevel(logging.DEBUG)
+
+file_formatter = logging.Formatter(
+    "%(asctime)s - %(filename)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+file_handler = TimedRotatingFileHandler(
+    DATA_PATH / "bgm.log",
+    when="D",
+    backupCount=1,
+    encoding="utf8",
+)
+file_handler.setFormatter(file_formatter)
+logger.addHandler(file_handler)

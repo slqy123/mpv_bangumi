@@ -8,7 +8,7 @@ from typing import Any
 
 from python_mpv_jsonipc import MPV
 
-from bgm import NOTIFY_LEVEL_NUM, logger
+from bgm import LOG_LEVEL, NOTIFY_LEVEL_NUM, logger
 from bgm.bangumi import (
     bangumi_fetch_episodes,
     bangumi_update_collection,
@@ -32,6 +32,7 @@ from bgm.utils import AsyncWorker
 class MPVLogHandler(logging.Handler):
     def __init__(self, sender, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.setLevel(LOG_LEVEL)
         self.level_mapping = {
             logging.DEBUG: "verbose",
             logging.INFO: "info",
