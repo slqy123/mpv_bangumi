@@ -154,7 +154,8 @@ function M:render()
 
         if current_y <= displayarea then
           local alignment = (event.style == "SP" or event.style == "MSG") and "\\an7" or "\\an8"
-          ass_text = string.format("%s{\\pos(%.1f,%.1f)%s}%s", style_prefix, current_x, current_y, alignment, event.text)
+          ass_text = string.format("%s{\\pos(%.1f,%.1f)%s}{%s}%s", style_prefix, current_x, current_y, alignment,
+            event.color, event.text)
         end
       else
         -- 预设位置弹幕 (TOP / BOTTOM / POS)
@@ -163,10 +164,10 @@ function M:render()
         if current_y <= displayarea then
           local alignment = (event.style == "SP" or event.style == "MSG") and "\\an7" or "\\an8"
           if event.pos then
-            ass_text = string.format("%s{\\pos(%.1f,%.1f)%s}%s", style_prefix, event.pos[1], event.pos[2], alignment,
-              event.text)
+            ass_text = string.format("%s{\\pos(%.1f,%.1f)%s}{%s}%s", style_prefix, event.pos[1], event.pos[2], alignment,
+              event.color, event.text)
           else
-            ass_text = string.format("%s{%s}%s", style_prefix, alignment, event.text)
+            ass_text = string.format("%s{%s}{%s}%s", style_prefix, alignment, event.color, event.text)
           end
         end
       end
