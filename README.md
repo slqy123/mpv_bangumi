@@ -5,8 +5,8 @@
 ## 主要功能
 
 - 自动识别番剧并加载弹幕
-- 发送弹幕至dandanplay弹幕库（目前接口权限未开放，暂不可用）
 - 自动同步bangumi追番进度
+- 发送弹幕（仅本地）
 - [N站](https://www.nicovideo.jp)弹幕支持（支持LLM[自动翻译](#llm-config)）
 
 其中弹幕播放功能参考[uosc_danmaku](https://github.com/Tony15246/uosc_danmaku)。
@@ -84,10 +84,6 @@ DANDANPLAY_APPSECRET=...
 BGM_ACCESS_TOKEN=...
 
 LLM_API_KEY="sk-..."
-
-# 暂时无用
-DANDANPLAY_USERNAME=...
-DANDANPLAY_PASSWORD=...
 ```
 
 ## 使用

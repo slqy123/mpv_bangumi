@@ -100,7 +100,7 @@ class DanDanAPI(API):
         self.appid = os.environ["DANDANPLAY_APPID"]
         self.secret = os.environ["DANDANPLAY_APPSECRET"]
 
-        load_authentication_token()
+        # load_authentication_token()
         self.has_auth = bool(AUTHENTICATION_TOKEN)
         self.auth_header = (
             {"Authorization": f"Bearer {AUTHENTICATION_TOKEN}"}
@@ -398,6 +398,7 @@ async def fetch_danmaku(ctx: "MPVBangumi", episode_id: int):
                     )
                 )
     comments = json.loads(comment_path.read_text(encoding="utf-8"))["comments"]
+    comments.extend(db.get_user_comments(episode_id))
     ctx.update_comments("main", comments)
 
 
@@ -476,36 +477,19 @@ async def dandanplay_comment(
     position: int = 1,
     time: float = 0.0,
 ):
-    async with DanDanAPI() as api:
-        if not api.has_auth:
-            logger.error("No authentication token found, please login first.")
-            return
-        success = (
-            await api.comment(
-                comment=comment,
-                episode_id=episode_id,
-                color=color,
-                position=position,
-                time=time,
-            )
-        ).get("success")
-
-        if not success:
-            logger.error("Failed to send comment.")
-            return
-
-        logger.notify("弹幕发送成功")
-        db.append_user_comment(
-            comment=comment,
-            episode_id=episode_id,
-            color=color,
-            position=position,
-            time=time,
-        )
-        comment_path = db.get_path(episode_id, "comment")
-        ctx.update_comments(
-            "main", json.loads(comment_path.read_text(encoding="utf-8"))["comments"]
-        )
+    db.append_user_comment(
+        comment=comment,
+        episode_id=episode_id,
+        color=color,
+        position=position,
+        time=time,
+    )
+    comments = db.get_user_comments(episode_id)
+    comment_path = db.get_path(episode_id, "comment")
+    if comment_path.exists():
+        comments = json.loads(comment_path.read_text(encoding="utf-8"))["comments"] + comments
+    ctx.update_comments("main", comments)
+    logger.notify("弹幕已保存到本地")
 
 
 async def dandanplay_search(ctx: "MPVBangumi", keyword: str):

@@ -14,6 +14,9 @@ from bgm import DATA_PATH, logger
 from bgm.utils import extract_info_from_filename
 
 
+USER_COMMENTS_PATH = DATA_PATH / "user_comments.json"
+
+
 class EpisodeMatch(BaseModel):
     episodeId: int
     animeId: int
@@ -140,27 +143,50 @@ class DB:
             json.dump(comment, f)
         return comment_path
 
+    def get_user_comments(self, episode_id: int) -> list[dict]:
+        if not USER_COMMENTS_PATH.exists():
+            return []
+        try:
+            with portalocker.Lock(
+                USER_COMMENTS_PATH,
+                mode="r",
+                flags=portalocker.LockFlags.SHARED,
+            ) as f:
+                comments = json.load(f).get(str(episode_id), [])
+        except (json.JSONDecodeError, OSError, AttributeError):
+            return []
+        return comments if isinstance(comments, list) else []
+
     def append_user_comment(
         self, comment: str, episode_id: int, color: int, position: int, time: float
     ):
-        comment_path = (
-            self.metadata_path / f"{episode_id // 10000}" / f"{episode_id}-comment.json"
-        )
-        with open(comment_path, "r", encoding="utf-8") as f:
-            comments = json.load(f)
-        comments["comments"].append(
-            {
-                "cid": 114514,
-                "p": f"{time:.2f},{position},{color},-1",
-                "m": comment,
-            }
-        )
-        comments["count"] += 1
-
         with portalocker.Lock(
-            comment_path, mode="w", flags=portalocker.LockFlags.EXCLUSIVE
+            USER_COMMENTS_PATH,
+            mode="a+",
+            flags=portalocker.LockFlags.EXCLUSIVE,
         ) as f:
+            f.seek(0)
+            try:
+                comments = json.load(f)
+            except (json.JSONDecodeError, EOFError):
+                comments = {}
+            if not isinstance(comments, dict):
+                comments = {}
+
+            episode_comments = comments.setdefault(str(episode_id), [])
+            if not isinstance(episode_comments, list):
+                episode_comments = []
+                comments[str(episode_id)] = episode_comments
+            episode_comments.append(
+                {
+                    "cid": 114514,
+                    "p": f"{time:.2f},{position},{color},-1",
+                    "m": comment,
+                }
+            )
+            f.seek(0)
             json.dump(comments, f, ensure_ascii=False)
+            f.truncate()
 
     @staticmethod
     def is_outdated(path: Path, max_age: int = 3600 * 4) -> bool:

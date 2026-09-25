@@ -17,7 +17,6 @@ from bgm.bangumi import (
 from bgm.dandanplay import (
     dandanplay_comment,
     dandanplay_get_episodes,
-    dandanplay_login_or_update,
     dandanplay_search,
     match_video,
 )
@@ -120,7 +119,6 @@ class MPVBangumi:
                 self.add_task(
                     dandanplay_fetch_danmaku(self, data["episode_info"].episodeId)
                 )
-                self.add_task(dandanplay_login_or_update())
             elif source == "niconico":
                 self.add_task(
                         niconico_fetch_danmaku(
