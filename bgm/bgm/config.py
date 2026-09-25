@@ -27,8 +27,13 @@ class DanmakuConfig(BaseModel):
 
 class LLMConfig(BaseModel):
     enabled: bool = False
-    base_url: str = "https://api.openai.com/v1"
-    model: str = "gpt-4o-mini"
+    base_url: str = "https://api.deepseek.com"
+    model: str = "deepseek-flash"
+    use_responses_api: bool = False
+    thinking: bool = True
+    reasoning_effort: Literal[
+        "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"
+    ] = "low"
 
 
 class Config(BaseModel):

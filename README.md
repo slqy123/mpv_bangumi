@@ -72,8 +72,14 @@ transparency = 0x30
 ```toml
 [llm]
 enabled = true
-base_url = "https://api.deepseek.com"  
-model = "deepseek-v4-flash"            
+base_url = "https://api.deepseek.com"
+model = "deepseek-flash"
+# 使用 OpenAI Responses API（默认 false）
+use_responses_api = false
+# 思考相关设置仅保证 DeepSeek API 兼容
+thinking = true
+# 取值：none / minimal / low / medium / high / xhigh / max / ultra
+reasoning_effort = "low"
 ```
 
 `.env`中可以自定义API令牌
