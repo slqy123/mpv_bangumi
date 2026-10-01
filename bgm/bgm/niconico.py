@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import aiohttp
-import portalocker
 from bs4 import BeautifulSoup
 
 from bgm import logger
@@ -425,8 +424,7 @@ class NicoNicoSource(DanmakuSource):
             "bgm_id": self.context.ids and self.context.ids.bgm_id,
         } | _series_map
 
-        with self.series_info_path.open("w", encoding="utf-8") as f:
-            f.write(json.dumps(series_map))
+        self.context.db.atomic_write(self.series_info_path, json.dumps(series_map))
         return series_map
 
     def _get_series_info(self) -> dict:
@@ -488,7 +486,12 @@ class NicoNicoSource(DanmakuSource):
             api_data = await fetch_page_data(video_id)
             result = await fetch_comments(api_data, flatten=True)
             desc = api_data["data"]["video"]["title"]
-            out_path.write_text(json.dumps({"result": result, "desc": desc}, ensure_ascii=False, indent=2), encoding='utf-8')
+            self.context.db.atomic_write(
+                out_path,
+                json.dumps(
+                    {"result": result, "desc": desc}, ensure_ascii=False, indent=2
+                ),
+            )
         else:
             _ = json.loads(out_path.read_text(encoding="utf-8"))
             result, desc = _["result"], _["desc"]
@@ -498,11 +501,7 @@ class NicoNicoSource(DanmakuSource):
 async def niconico_fetch_danmaku(
     ctx: "MPVBangumi", episode_id: int, options: dict, context: DanmakuSource.Context
 ):
-    with portalocker.Lock(
-        context.data_path.joinpath("update.lock"),
-        mode="w",
-        flags=portalocker.LockFlags.EXCLUSIVE,
-    ):
+    async with context.db.update_lock(context.data_path):
         res = await NicoNicoSource(options, context).fetch(episode_id % 10000)
         if not res:
             logger.warning("Failed to get nicovideo danmaku!")

@@ -3,8 +3,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
-import portalocker
-
 from bgm import DATA_PATH
 from bgm.db import DB, IDS, EpisodeMatch, db
 
@@ -28,7 +26,7 @@ async def get_sources(ctx: "MPVBangumi", episode_info: 'EpisodeMatch') -> None:
     source_path = db.get_path(episode_info.episodeId, "source")
 
     if source_path.exists():
-        sources = json.loads(source_path.read_text(encoding="utf-8"))
+        sources = json.loads(await db.read_locked(source_path))
     else:
         sources = {"main": {"enabled": True}}
 
@@ -64,10 +62,7 @@ async def get_sources(ctx: "MPVBangumi", episode_info: 'EpisodeMatch') -> None:
 
 async def set_source_status(ctx: "MPVBangumi", episode_info: EpisodeMatch, status: dict):
     source_path = db.get_path(episode_info.episodeId, "source")
-    with portalocker.Lock(
-        source_path, mode="w", flags=portalocker.LockFlags.EXCLUSIVE
-    ) as f:
-        f.write(json.dumps(status))
+    await db.write_locked(source_path, json.dumps(status))
 
     ctx.send_action("sources", {"episode_info": episode_info})
 
@@ -88,7 +83,7 @@ async def _get_or_update_bangumi_data() -> dict:
 
     import aiohttp
 
-    with db.check_update(
+    async with db.check_update_async(
         DATA_PATH.joinpath("bangumi-data.json"), 1 * 12 * 3600
     ) as writer:
         if writer is not None:
@@ -113,9 +108,7 @@ async def _get_or_update_bangumi_data() -> dict:
             writer(res_str)
             return json.loads(res_str)
 
-    data = get_bangumi_data()
-    assert data is not None
-    return data
+    return json.loads(await db.read_locked(DATA_PATH.joinpath("bangumi-data.json")))
 
 
 async def get_or_update_bangumi_data() -> dict:

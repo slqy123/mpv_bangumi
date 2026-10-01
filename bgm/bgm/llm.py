@@ -7,6 +7,7 @@ from openai import AsyncOpenAI
 
 from bgm import logger
 from bgm.config import config
+from bgm.db import db
 
 SYSTEM_PROMPT = (
     "You are a danmaku (弹幕) translator. Translate Japanese danmaku comments to natural Chinese.\n"
@@ -288,8 +289,12 @@ class DanmakuTranslator:
 
     def _write_cache(self, translations: dict[str, str], terms: dict[str, str]) -> None:
         self.data_path.mkdir(parents=True, exist_ok=True)
-        with self.cache_path.open("w", encoding="utf-8") as f:
-            json.dump({"translations": translations, "terms": terms}, f, ensure_ascii=False)
+        db.atomic_write(
+            self.cache_path,
+            json.dumps(
+                {"translations": translations, "terms": terms}, ensure_ascii=False
+            ),
+        )
 
     @staticmethod
     def _apply_translations(danmaku: list[dict], translations: dict[str, str]) -> None:

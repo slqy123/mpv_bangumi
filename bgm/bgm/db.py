@@ -1,6 +1,8 @@
+import asyncio
 import contextlib
 import datetime
 import json
+import os
 import sqlite3
 from collections import Counter
 from collections.abc import Callable
@@ -49,6 +51,7 @@ class DB:
         self.conn = sqlite3.connect(self.db_path, check_same_thread=False, autocommit=True)
         self.conn.execute("PRAGMA journal_mode=WAL;")
         self.cursor = self.conn.cursor()
+        self._update_locks: dict[Path, asyncio.Lock] = {}
         self.create_table()
 
     def __del__(self):
@@ -125,8 +128,7 @@ class DB:
     def set_episode_info(self, episode_id: int, data: EpisodeMatch):
         info = self.metadata_path / f"{episode_id // 10000}" / f"{episode_id}.json"
         info.parent.mkdir(parents=True, exist_ok=True)
-        with open(info, "w", encoding="utf-8") as f:
-            json.dump(data.model_dump(), f, ensure_ascii=False)
+        self.atomic_write(info, json.dumps(data.model_dump(), ensure_ascii=False))
 
     def update_comment(self, episode_id: int, update_cb: Callable[[], dict]) -> Path:
         comment_path = (
@@ -139,8 +141,7 @@ class DB:
             )
             return comment_path
         comment = update_cb()
-        with open(comment_path, "w", encoding="utf-8") as f:
-            json.dump(comment, f)
+        self.atomic_write(comment_path, json.dumps(comment))
         return comment_path
 
     def get_user_comments(self, episode_id: int) -> list[dict]:
@@ -224,6 +225,9 @@ class DB:
             raise ValueError(f"Unknown type: {type_}")
         return path
 
+    def update_lock(self, path: Path) -> asyncio.Lock:
+        return self._update_locks.setdefault(path, asyncio.Lock())
+
     @contextlib.asynccontextmanager
     async def check_update_async(self, path: Path, max_age: int = 3600 * 4):
         if not self.is_outdated(path, max_age):
@@ -231,44 +235,34 @@ class DB:
             return
 
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.touch(exist_ok=True)
-        with portalocker.Lock(
-            path, mode="r+b", flags=portalocker.LockFlags.EXCLUSIVE
-        ) as f:
+        async with self.update_lock(path):
             if not self.is_outdated(path, max_age):
                 yield None
                 return
 
             def safe_write(content: str):
-                f.seek(0)
-                f.write(content.encode("utf-8"))
-                f.truncate()
-                f.flush()
+                self.atomic_write(path, content)
 
             yield safe_write
 
-    @contextlib.contextmanager
-    def check_update(self, path: Path, max_age: int = 3600 * 4):
-        if not self.is_outdated(path, max_age):
-            yield None
-            return
-
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.touch(exist_ok=True)
-        with portalocker.Lock(
-            path, mode="r+b", flags=portalocker.LockFlags.EXCLUSIVE
-        ) as f:
-            if not self.is_outdated(path, max_age):
-                yield None
-                return
-
-            def safe_write(content: str):
-                f.seek(0)
-                f.write(content.encode("utf-8"))
-                f.truncate()
+    @staticmethod
+    def atomic_write(path: Path, content: str):
+        tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+        try:
+            with tmp.open("w", encoding="utf-8") as f:
+                f.write(content)
                 f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, path)
+        finally:
+            with contextlib.suppress(OSError):
+                tmp.unlink()
 
-            yield safe_write
+    async def read_locked(self, path: Path) -> str:
+        return path.read_text(encoding="utf-8")
+
+    async def write_locked(self, path: Path, content: str):
+        self.atomic_write(path, content)
 
     def get_or_update(
         self,
@@ -286,8 +280,7 @@ class DB:
                 return json.load(f)
         data = update_cb()
         path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False)
+        self.atomic_write(path, json.dumps(data, ensure_ascii=False))
         return data
 
 

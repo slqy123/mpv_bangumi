@@ -264,7 +264,7 @@ async def construct_episode_match(episode_id: int) -> EpisodeMatch | None:
                 if info is None:
                     return
                 writer(json.dumps(info))
-    anime_info = json.loads(info_path.read_text(encoding="utf-8"))
+    anime_info = json.loads(await db.read_locked(info_path))
     try:
         episode_part = (
             filter(lambda x: x["episodeId"] == episode_id, anime_info["episodes"])
@@ -397,7 +397,7 @@ async def fetch_danmaku(ctx: "MPVBangumi", episode_id: int):
                         ensure_ascii=True,
                     )
                 )
-    comments = json.loads(comment_path.read_text(encoding="utf-8"))["comments"]
+    comments = json.loads(await db.read_locked(comment_path))["comments"]
     comments.extend(db.get_user_comments(episode_id))
     ctx.update_comments("main", comments)
 
@@ -413,7 +413,7 @@ async def get_bgm_id(video: Path, anime_id: int):
                     return
                 writer(json.dumps(info, ensure_ascii=True))
 
-    info = json.loads(info_path.read_text(encoding="utf-8"))
+    info = json.loads(await db.read_locked(info_path))
 
     bgm_id = int(info["bangumiUrl"].rsplit("/", 1)[1])
     db.set_bgm_id(str(video), bgm_id)
@@ -487,7 +487,7 @@ async def dandanplay_comment(
     comments = db.get_user_comments(episode_id)
     comment_path = db.get_path(episode_id, "comment")
     if comment_path.exists():
-        comments = json.loads(comment_path.read_text(encoding="utf-8"))["comments"] + comments
+        comments = json.loads(await db.read_locked(comment_path))["comments"] + comments
     ctx.update_comments("main", comments)
     logger.notify("弹幕已保存到本地")
 
@@ -520,7 +520,7 @@ async def dandanplay_get_episodes(ctx: "MPVBangumi", anime_id: int):
                     return
                 writer(json.dumps(info))
 
-    episodes = json.loads(info_path.read_text(encoding="utf-8"))["episodes"]
+    episodes = json.loads(await db.read_locked(info_path))["episodes"]
     ctx.resp_message(
         "anime-episodes",
         [
