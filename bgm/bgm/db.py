@@ -15,7 +15,6 @@ from pydantic import BaseModel
 from bgm import DATA_PATH, logger
 from bgm.utils import extract_info_from_filename
 
-
 USER_COMMENTS_PATH = DATA_PATH / "user_comments.json"
 
 
@@ -80,11 +79,13 @@ class DB:
         return None
 
     def get_autoload_source(self, dir_: str, filename: str) -> int | None:
+        prefix = str(Path(dir_)).rstrip(os.sep) + os.sep
+        pattern = prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
         self.cursor.execute(
-            f"SELECT path, dandanplay_id FROM {self.TABLE_NAME} WHERE path like ? and dandanplay_id IS NOT NULL",
-            (dir_ + "%",),
+            f"SELECT path, dandanplay_id FROM {self.TABLE_NAME} WHERE path LIKE ? ESCAPE '\\' AND dandanplay_id IS NOT NULL",
+            (pattern,),
         )
-        results = self.cursor.fetchall()
+        results = [r for r in self.cursor.fetchall() if Path(r[0]).parent == Path(dir_)]
         filenames = [Path(r[0]).name for r in results]
         episode_ids = [r[1] for r in results]
         animes = {r // 10000 for r in episode_ids}

@@ -12,6 +12,7 @@ PROPERTY_DISPATCH = "user-data/mpv_bangumi/dispatch"
 
 Pid = mp_utils.getpid()
 BgmReady = false
+RequestID = 0
 
 -- global variables
 Delay = 0
@@ -114,6 +115,14 @@ local function init(episode_id)
     init_bgm()
   end
 end
+
+mp.add_hook("on_unload", 50, function()
+  RequestID = RequestID + 1
+  if BgmReady then
+    bgm.send_action("invalidate", {})
+  end
+  reset_globals()
+end)
 
 mp.register_event("file-loaded", function()
   local path = mp.get_property "path"
@@ -400,6 +409,10 @@ mp.register_script_message("mpvbangumi-action", function(_args)
   local args = mp_utils.parse_json(_args)
   if type(args) ~= "table" then
     mp.msg.error("Json parse error: ", args)
+    return
+  end
+
+  if args.request_id and args.request_id ~= RequestID then
     return
   end
 

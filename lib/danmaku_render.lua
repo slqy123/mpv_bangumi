@@ -100,10 +100,10 @@ function M:render()
   end
 
   local pos, err = mp.get_property_number "time-pos"
-  pos = pos - Delay
   if err or not pos then
     return
   end
+  pos = pos - Delay
 
   local style = self.style
   local fontsize = style.fontsize

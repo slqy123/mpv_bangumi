@@ -355,7 +355,7 @@ async def match_video(ctx: 'MPVBangumi', video: Path, force_id: int | None = Non
                 episode_info = await api_match_danmaku(ctx, video)
                 if episode_info is None:
                     return
-            db.set_episode_info(episode_id, episode_info)
+            db.set_episode_info(episode_info.episodeId, episode_info)
         db.set_dandanplay_id(str(video), episode_info.episodeId)
     else:
         # match video to dandanplay episode

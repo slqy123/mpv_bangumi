@@ -49,9 +49,10 @@ def dispatch(name: str, value: str):
     info = json.loads(value)
     action = info["action"]
     data = info["data"]
+    rid = info.get("request_id")
     del value, info
 
-    bgm.send_action(action, data)
+    bgm.send_action(action, data, rid=rid)
 
 
 def main():

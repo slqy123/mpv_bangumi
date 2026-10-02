@@ -94,7 +94,7 @@ async def _get_or_update_bangumi_data() -> dict:
                     meta = await meta_res.json()
                 pub_time = meta["publish_time"] / 1000
                 bangumi_data_path = DATA_PATH.joinpath("bangumi-data.json")
-                if bangumi_data_path.stat().st_mtime >= pub_time:
+                if bangumi_data_path.exists() and bangumi_data_path.stat().st_mtime >= pub_time:
                     data = get_bangumi_data()
                     assert data is not None
                     return data

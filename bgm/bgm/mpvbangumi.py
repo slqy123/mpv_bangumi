@@ -1,9 +1,10 @@
 import json
 import logging
 from collections.abc import Awaitable
+from contextvars import ContextVar
 from itertools import chain
 from pathlib import Path
-from threading import Lock
+from threading import RLock
 from typing import Any
 
 from python_mpv_jsonipc import MPV
@@ -26,6 +27,8 @@ from bgm.db import EpisodeMatch
 from bgm.niconico import niconico_fetch_danmaku
 from bgm.source import get_sources, set_source_status
 from bgm.utils import AsyncWorker
+
+request_id: ContextVar[int | None] = ContextVar("request_id", default=None)
 
 
 class MPVLogHandler(logging.Handler):
@@ -57,7 +60,7 @@ class MPVBangumi:
         self.mpv = mpv
         self.worker = AsyncWorker()
         self.rid = 0
-        self.ipc_command_lock = Lock()
+        self.ipc_command_lock = RLock()
         self.mpv_log_handler = MPVLogHandler(sender=self.resp_message)
         logger.addHandler(self.mpv_log_handler)
 
@@ -73,7 +76,13 @@ class MPVBangumi:
 
     def update_comments(self, source: str, comments: list[dict], silent: bool = False):
         """comments in dandanplay style"""
-        self.__comments[source] = comments
+        with self.ipc_command_lock:
+            if not self.is_current_request():
+                return
+            self.__comments[source] = comments
+            self._publish_comments(source, comments, silent)
+
+    def _publish_comments(self, source: str, comments: list[dict], silent: bool):
         if not silent:
             logger.info(f"source {source}: {len(comments)} danmakus")
 
@@ -89,20 +98,53 @@ class MPVBangumi:
             },
         )
 
+    def is_current_request(self):
+        return request_id.get() in (None, self.rid)
+
     def add_task(self, task: Awaitable):
-        self.worker.submit_task(task)
+        rid = request_id.get()
+        if rid is None:
+            rid = self.rid
+
+        async def run():
+            token = request_id.set(rid)
+            try:
+                await task
+            finally:
+                request_id.reset(token)
+
+        self.worker.submit_task(run())
 
     def resp_message(self, action: str, data: Any):
+        if not self.is_current_request():
+            return
         self.mpv.command(
             "script-message",
             "mpvbangumi-action",
             json.dumps(
-                {"action": action, "data": data},
+                {"action": action, "data": data, "request_id": request_id.get()},
                 ensure_ascii=True,
             ),
         )
 
-    def send_action(self, action: str, data: Any):
+    def send_action(self, action: str, data: Any, rid: int | None = None):
+        with self.ipc_command_lock:
+            if rid is not None:
+                if rid < self.rid:
+                    return
+                if rid != self.rid:
+                    self.rid = rid
+                    self.clear_comments()
+            elif not self.is_current_request():
+                return
+            token = request_id.set(rid) if rid is not None else None
+            try:
+                self._send_action(action, data)
+            finally:
+                if token is not None:
+                    request_id.reset(token)
+
+    def _send_action(self, action: str, data: Any):
         if isinstance(data, str):
             data = json.loads(data)
 

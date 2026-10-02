@@ -7,7 +7,8 @@ function M.send_action(action, data)
   mp.set_property(PROPERTY_DISPATCH, mp_utils.format_json(
     {
       action = action,
-      data = data
+      data = data,
+      request_id = RequestID
     }
   ))
 end
@@ -23,6 +24,7 @@ function M.match(force_id)
     return
   end
 
+  RequestID = RequestID + 1
   M.send_action("match", {
     path = file_path,
     force_id = force_id
@@ -152,6 +154,7 @@ function M.get_dandanplay_episodes(anime_id)
 end
 
 function M.update_source_status(episode_info, source_status)
+  RequestID = RequestID + 1
   M.send_action("set-source-status", {
     episode_info = episode_info,
     status = source_status

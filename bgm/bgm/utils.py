@@ -85,7 +85,18 @@ class AsyncWorker:
             self.thread.join()
 
     def submit_task(self, coro):
-        if asyncio._get_running_loop() is None:
-            asyncio.run_coroutine_threadsafe(coro, self.loop)
-        else:
-            asyncio.create_task(coro)
+        from bgm import logger
+
+        async def run():
+            try:
+                await coro
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("Background task failed")
+
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run_coroutine_threadsafe(run(), self.loop)
+        return asyncio.create_task(run())

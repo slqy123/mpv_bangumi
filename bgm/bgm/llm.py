@@ -275,7 +275,7 @@ class DanmakuTranslator:
 
     @staticmethod
     def _comment_key(d: dict) -> str:
-        return f"{d['p'].split(',')[0]}|{d['m']}"
+        return f"{d['p'].split(',')[0]}|{d.get('m_original', d['m'])}"
 
     def _load_cache(self) -> dict:
         if not self.cache_path.exists():
@@ -299,7 +299,7 @@ class DanmakuTranslator:
     @staticmethod
     def _apply_translations(danmaku: list[dict], translations: dict[str, str]) -> None:
         for d in danmaku:
-            key = f"{d['p'].split(',')[0]}|{d['m']}"
+            key = DanmakuTranslator._comment_key(d)
             if trans := translations.get(key):
-                d["m_original"] = d["m"]
+                d.setdefault("m_original", d["m"])
                 d["m"] = trans
