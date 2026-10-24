@@ -344,9 +344,10 @@ async def fetch_page_data(video_id: str) -> dict:
         raise RuntimeError('Unable to find server-response metadata on watch page')
 
     server_response = json.loads(html.unescape(mobj.group('content')))
+    response_data = (server_response.get('data') or {}).get('response') or {}
     return {
         'meta': (server_response.get('meta') or {}),
-        'data': (((server_response.get('data') or {}).get('response')) or {}),
+        'data': (response_data.get('$watchV4') or {}).get('data') or response_data,
     }
 
 
