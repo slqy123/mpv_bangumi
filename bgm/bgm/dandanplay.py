@@ -377,10 +377,13 @@ async def match_video(ctx: 'MPVBangumi', video: Path, force_id: int | None = Non
     )
 
     ctx.send_action("sources", {"episode_info": episode_info})
+    bgm_id = await get_bgm_id(video=video, anime_id=episode_info.animeId)
+    if bgm_id is None:
+        return
     ctx.send_action(
         "update-bangumi-metadata",
         {
-            "bgm_id": await get_bgm_id(video=video, anime_id=episode_info.animeId),
+            "bgm_id": bgm_id,
             "episode_id": episode_info.episodeId,
         },
     )
@@ -402,7 +405,7 @@ async def fetch_danmaku(ctx: "MPVBangumi", episode_id: int):
     ctx.update_comments("main", comments)
 
 
-async def get_bgm_id(video: Path, anime_id: int):
+async def get_bgm_id(video: Path, anime_id: int) -> int | None:
     info_path = db.get_path(anime_id * 10000, "info")
 
     async with db.check_update_async(info_path, 3600 * 24) as writer:
@@ -415,7 +418,14 @@ async def get_bgm_id(video: Path, anime_id: int):
 
     info = json.loads(await db.read_locked(info_path))
 
-    bgm_id = int(info["bangumiUrl"].rsplit("/", 1)[1])
+    bangumi_url = info.get("bangumiUrl")
+    try:
+        bgm_id = int(bangumi_url.rsplit("/", 1)[1]) if isinstance(bangumi_url, str) else 0
+    except (ValueError, IndexError):
+        bgm_id = 0
+    if bgm_id <= 0:
+        logger.warning("Missing or invalid Bangumi URL for DandanPlay anime %d: %r", anime_id, bangumi_url)
+        return None
     db.set_bgm_id(str(video), bgm_id)
     logger.info("successfully update anime info: %d", bgm_id)
     return bgm_id
