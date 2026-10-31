@@ -376,8 +376,8 @@ async def match_video(ctx: 'MPVBangumi', video: Path, force_id: int | None = Non
         },
     )
 
-    ctx.send_action("sources", {"episode_info": episode_info})
     bgm_id = await get_bgm_id(video=video, anime_id=episode_info.animeId)
+    ctx.send_action("sources", {"episode_info": episode_info})
     if bgm_id is None:
         return
     ctx.send_action(
