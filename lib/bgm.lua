@@ -153,11 +153,32 @@ function M.get_dandanplay_episodes(anime_id)
   M.send_action("get-episodes", { anime_id = anime_id })
 end
 
+function M.validate_bangumi_id(value)
+  M.send_action("validate-bangumi-id", { value = value })
+end
+
+function M.set_bangumi_id(subject_id)
+  if UpdateEpisodeTimer then
+    UpdateEpisodeTimer:kill()
+    UpdateEpisodeTimer = nil
+  end
+  if AnimeInfo then
+    AnimeInfo.ready = false
+  end
+  local path = mp.command_native({ "normalize-path", mp.get_property "path" })
+  M.send_action(subject_id and "set-bangumi-id" or "clear-bangumi-id", {
+    path = path,
+    episode_info = EpisodeInfo,
+    bgm_id = subject_id,
+  })
+end
+
 function M.update_source_status(episode_info, source_status)
   RequestID = RequestID + 1
   M.send_action("set-source-status", {
     episode_info = episode_info,
-    status = source_status
+    status = source_status,
+    bangumi_info = AnimeInfo,
   })
 end
 

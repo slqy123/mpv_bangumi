@@ -287,6 +287,7 @@ async def construct_episode_match(episode_id: int) -> EpisodeMatch | None:
 async def api_match_danmaku(ctx: 'MPVBangumi', video: Path):
     episode_info = await get_match_info(video)
     if episode_info is None:
+        ctx.resp_message("notify", {"message": "未找到匹配结果，请用 Alt+m 手动匹配"})
         return
     if len(episode_info) > 1:
         ctx.resp_message(
@@ -325,6 +326,7 @@ async def match_video(ctx: 'MPVBangumi', video: Path, force_id: int | None = Non
             episode_info = await construct_episode_match(episode_id)
         if episode_info is None:
             logger.error("Failed to find the given episode info")
+            ctx.resp_message("notify", {"message": "未找到所选剧集信息，请重新匹配"})
             return
         logger.debug("Using forced episode ID: %s for video %s", force_id, video.name)
         logger.debug("ForceID episode info: %s", episode_info)
@@ -339,6 +341,7 @@ async def match_video(ctx: 'MPVBangumi', video: Path, force_id: int | None = Non
             episode_info = await construct_episode_match(episode_id)
             if episode_info is None:
                 logger.error(f"Failed to construct episode match for: {video.name}")
+                ctx.resp_message("notify", {"message": "无法读取已匹配剧集的信息，请用 Alt+m 重新匹配"})
                 return
             db.set_dandanplay_id(str(video), episode_info.episodeId)
             db.set_episode_info(episode_id, episode_info)
@@ -377,14 +380,14 @@ async def match_video(ctx: 'MPVBangumi', video: Path, force_id: int | None = Non
     )
 
     bgm_id = await get_bgm_id(video=video, anime_id=episode_info.animeId)
+    db.set_anime_bgm_id(episode_info.animeId, bgm_id)
     ctx.send_action("sources", {"episode_info": episode_info})
-    if bgm_id is None:
-        return
     ctx.send_action(
         "update-bangumi-metadata",
         {
             "bgm_id": bgm_id,
             "episode_id": episode_info.episodeId,
+            "source": "manual" if db.get_bangumi_override(episode_info.animeId) is not None else "auto",
         },
     )
 
@@ -405,7 +408,12 @@ async def fetch_danmaku(ctx: "MPVBangumi", episode_id: int):
     ctx.update_comments("main", comments)
 
 
-async def get_bgm_id(video: Path, anime_id: int) -> int | None:
+async def get_bgm_id(video: Path, anime_id: int, *, use_override: bool = True) -> int | None:
+    bgm_id = db.get_bangumi_override(anime_id) if use_override else None
+    if bgm_id is not None:
+        db.set_bgm_id(str(video), bgm_id)
+        return bgm_id
+
     info_path = db.get_path(anime_id * 10000, "info")
 
     async with db.check_update_async(info_path, 3600 * 24) as writer:
@@ -413,7 +421,8 @@ async def get_bgm_id(video: Path, anime_id: int) -> int | None:
             async with DanDanAPI() as api:
                 info = await api.get_anime_info(anime_id)
                 if info is None:
-                    return
+                    db.set_bgm_id(str(video), None)
+                    return None
                 writer(json.dumps(info, ensure_ascii=True))
 
     info = json.loads(await db.read_locked(info_path))
@@ -425,6 +434,7 @@ async def get_bgm_id(video: Path, anime_id: int) -> int | None:
         bgm_id = 0
     if bgm_id <= 0:
         logger.warning("Missing or invalid Bangumi URL for DandanPlay anime %d: %r", anime_id, bangumi_url)
+        db.set_bgm_id(str(video), None)
         return None
     db.set_bgm_id(str(video), bgm_id)
     logger.info("successfully update anime info: %d", bgm_id)
@@ -499,7 +509,8 @@ async def dandanplay_comment(
     if comment_path.exists():
         comments = json.loads(await db.read_locked(comment_path))["comments"] + comments
     ctx.update_comments("main", comments)
-    logger.notify("弹幕已保存到本地")
+    logger.info("Danmaku saved locally")
+    ctx.resp_message("notify", {"message": "弹幕已保存到本地"})
 
 
 async def dandanplay_search(ctx: "MPVBangumi", keyword: str):

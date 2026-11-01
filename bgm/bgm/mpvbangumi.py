@@ -9,11 +9,12 @@ from typing import Any
 
 from python_mpv_jsonipc import MPV
 
-from bgm import LOG_LEVEL, NOTIFY_LEVEL_NUM, logger
+from bgm import LOG_LEVEL, logger
 from bgm.bangumi import (
-    bangumi_fetch_episodes,
-    bangumi_update_collection,
+    bangumi_set_override,
     bangumi_update_episode,
+    bangumi_update_metadata,
+    bangumi_validate_subject,
 )
 from bgm.dandanplay import (
     dandanplay_comment,
@@ -40,7 +41,7 @@ class MPVLogHandler(logging.Handler):
             logging.INFO: "info",
             logging.WARNING: "warn",
             logging.ERROR: "error",
-            NOTIFY_LEVEL_NUM: "notify",
+            logging.CRITICAL: "error",
         }
         self.sender = sender
 
@@ -49,8 +50,7 @@ class MPVLogHandler(logging.Handler):
             if record.levelno not in self.level_mapping:
                 return
             level = self.level_mapping[record.levelno]
-            msg = self.format(record)
-            self.sender("log", {"level": level, "msg": msg})
+            self.sender("log", {"level": level, "msg": record.getMessage()})
         except Exception:
             self.handleError(record)
 
@@ -154,6 +154,7 @@ class MPVBangumi:
             )
         elif action == "sources":
             self.clear_comments()
+            self._publish_comments("main", [], silent=True)
             self.add_task(get_sources(self, data["episode_info"]))
         elif action == "fetch-danmaku":
             source = data["source"]
@@ -169,11 +170,18 @@ class MPVBangumi:
                 )
 
         elif action == "update-bangumi-metadata":
-            self.add_task(bangumi_update_collection(self, data["bgm_id"]))
             self.add_task(
-                bangumi_fetch_episodes(self, data["bgm_id"], data["episode_id"])
+                bangumi_update_metadata(self, data["bgm_id"], data["episode_id"], data["source"])
             )
-            self.resp_message("set-bangumi-id", {"bgm_id": data["bgm_id"]})
+        elif action == "validate-bangumi-id":
+            self.add_task(bangumi_validate_subject(self, data["value"]))
+        elif action in ("set-bangumi-id", "clear-bangumi-id"):
+            self.add_task(
+                bangumi_set_override(
+                    self, Path(data["path"]), EpisodeMatch(**data["episode_info"]),
+                    int(data["bgm_id"]) if action == "set-bangumi-id" else None,
+                )
+            )
         elif action == "update-bangumi-episode":
             self.add_task(
                 bangumi_update_episode(self, data["bgm_id"], data["episode_id"])
@@ -203,3 +211,10 @@ class MPVBangumi:
                     self, episode_info=EpisodeMatch(**data["episode_info"]), status=data["status"]
                 )
             )
+            info = data.get("bangumi_info")
+            if info and info.get("bgm_id") and not info.get("ready"):
+                self.add_task(
+                    bangumi_update_metadata(
+                        self, info["bgm_id"], data["episode_info"]["episodeId"], info["source"]
+                    )
+                )

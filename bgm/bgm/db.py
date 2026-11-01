@@ -69,6 +69,40 @@ class DB:
             """
         )
 
+        self.cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS bangumi_overrides (
+                dandanplay_anime_id INTEGER PRIMARY KEY,
+                bangumi_subject_id INTEGER NOT NULL
+            )
+            """
+        )
+
+    def get_bangumi_override(self, anime_id: int) -> int | None:
+        row = self.cursor.execute(
+            "SELECT bangumi_subject_id FROM bangumi_overrides WHERE dandanplay_anime_id = ?",
+            (anime_id,),
+        ).fetchone()
+        return row[0] if row else None
+
+    def set_bangumi_override(self, anime_id: int, subject_id: int):
+        self.cursor.execute(
+            "INSERT INTO bangumi_overrides VALUES (?, ?) "
+            "ON CONFLICT(dandanplay_anime_id) DO UPDATE SET bangumi_subject_id = excluded.bangumi_subject_id",
+            (anime_id, subject_id),
+        )
+
+    def clear_bangumi_override(self, anime_id: int):
+        self.cursor.execute(
+            "DELETE FROM bangumi_overrides WHERE dandanplay_anime_id = ?", (anime_id,)
+        )
+
+    def set_anime_bgm_id(self, anime_id: int, subject_id: int | None):
+        self.cursor.execute(
+            f"UPDATE {self.TABLE_NAME} SET bgm_id = ? WHERE dandanplay_id / 10000 = ?",
+            (subject_id, anime_id),
+        )
+
     def get(self, **query: Unpack[QueryDict]):
         query_str = " AND ".join(f"{k}=?" for k in query)
         sql = f"SELECT path, bgm_id, dandanplay_id FROM {self.TABLE_NAME} WHERE {query_str}"
@@ -105,7 +139,7 @@ class DB:
             return None
         return anime_id * 10000 + ep + offset
 
-    def set_bgm_id(self, path: str, id_: int):
+    def set_bgm_id(self, path: str, id_: int | None):
         self.cursor.execute(
             f"INSERT INTO {self.TABLE_NAME} (path, bgm_id) VALUES (?, ?) "
             "ON CONFLICT(path) DO UPDATE SET bgm_id = ?",
